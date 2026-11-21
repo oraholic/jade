@@ -24,12 +24,36 @@
   <!-- ===================== 아이 모드 ===================== -->
   <main id="kidView" class="view">
     <header class="kid-top">
-      <div class="date-chip" id="todayLabel">오늘</div>
+      <div class="kid-brand"><span class="brand-paw" aria-hidden="true">🐾</span>용돈 챌린지</div>
       <div class="top-actions">
         <button id="soundBtn" class="icon-btn" type="button" aria-label="소리 켜기 또는 끄기">🔔</button>
         <button id="parentBtn" class="icon-btn lock" type="button" aria-label="부모님 모드 열기">🔒<span>부모님</span></button>
       </div>
     </header>
+
+    <section class="date-head" aria-label="오늘 날짜">
+      <div class="date-copy">
+        <div class="date-kicker">오늘</div>
+        <h1 class="date-big"><span id="todayDate">2026년 11월 22일</span> <em id="todayDow">(일)</em></h1>
+        <p class="date-sub" id="dateSub">일요일 · 이번 주 정산날이에요</p>
+      </div>
+      <img class="date-cat" src="assets/cat-hero.webp" alt="손을 흔드는 아기고양이" width="92" height="108" fetchpriority="high">
+    </section>
+
+    <section class="mustdo" id="mustDoCard" aria-labelledby="mustDoTitle">
+      <div class="mustdo-head">
+        <img class="mustdo-cat" src="assets/cat-peek.webp" alt="" width="64" height="40">
+        <div class="mustdo-copy">
+          <h2 class="mustdo-title" id="mustDoTitle">오늘 꼭 해야 할 일</h2>
+          <p class="mustdo-sub" id="mustDoSub">오늘 꼭 할 일을 적어 봐요</p>
+        </div>
+      </div>
+      <ul class="mustdo-list" id="mustDoList"></ul>
+      <form class="mustdo-form" id="mustDoForm" autocomplete="off">
+        <input id="mustDoInput" class="mustdo-input" type="text" maxlength="40" placeholder="예: 수학 숙제 내일 것까지" enterkeyhint="done" aria-label="오늘 꼭 해야 할 일 적기">
+        <button class="mustdo-add" id="mustDoAdd" type="submit" aria-label="오늘 꼭 할 일 추가">+</button>
+      </form>
+    </section>
 
     <section class="hero">
       <div class="hero-head">

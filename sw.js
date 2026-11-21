@@ -1,5 +1,5 @@
 /* 용돈 챌린지 — service worker (오프라인 캐시) */
-const CACHE = 'allowance-v1.0.0';
+const CACHE = 'allowance-v1.1.0';
 const ASSETS = [
   './',
   './index.html',
@@ -11,7 +11,10 @@ const ASSETS = [
   './icon-512.png',
   './icon-maskable-512.png',
   './apple-touch-icon.png',
-  './favicon-32.png'
+  './favicon-32.png',
+  './assets/cat-hero.webp',
+  './assets/cat-peek.webp',
+  './assets/cat-sleep.webp'
 ];
 
 self.addEventListener('install', (e) => {

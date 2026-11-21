@@ -7,7 +7,7 @@
 
 /* ---------- 1. 상수 & 유틸 ---------- */
 const LS_KEY = 'allowance-challenge-v1';
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.1.0';
 const DAY_NAMES = ['월', '화', '수', '목', '금', '토', '일'];
 const DAY_FULL = ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일'];
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
@@ -69,6 +69,7 @@ function defaultState() {
     clock: 0,
     tasks: seedTasks(),
     tasksTs: 0,
+    mustdos: {},
     completions: {},
     settlements: [],
     settings: { name: '우리 딸', sound: true },
@@ -106,6 +107,29 @@ function normalizeState(raw) {
   s.tasks = Array.isArray(raw.tasks)
     ? raw.tasks.map(normTask).filter(Boolean)
     : base.tasks;
+  s.mustdos = {};
+  if (raw.mustdos && typeof raw.mustdos === 'object' && !Array.isArray(raw.mustdos)) {
+    Object.keys(raw.mustdos).forEach(function (ds) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(ds)) return;
+      const arr = raw.mustdos[ds];
+      if (!Array.isArray(arr)) return;
+      const out = arr.slice(0, 60).map(function (m, i) {
+        if (!m || typeof m !== 'object') return null;
+        const text = String(m.text || '').trim().slice(0, 40);
+        if (!text) return null;
+        return {
+          id: String(m.id || ('m_' + i + '_' + Math.random().toString(36).slice(2, 6))),
+          text: text,
+          done: !!m.done,
+          c: Number(m.c) || 0,
+          ord: Number.isFinite(Number(m.ord)) ? Number(m.ord) : i,
+          at: String(m.at || ''),
+          del: !!m.del
+        };
+      }).filter(Boolean);
+      if (out.length) s.mustdos[ds] = out;
+    });
+  }
   s.completions = {};
   if (raw.completions && typeof raw.completions === 'object') {
     Object.keys(raw.completions).forEach(function (ds) {
@@ -214,6 +238,55 @@ function getCount(ds, taskId) {
 function allDone(ds) {
   const ts = tasksForDate(ds);
   return ts.length > 0 && ts.every(t => isDone(ds, t.id));
+}
+
+/* 오늘 꼭 해야 할 일 (날짜별 저장, 용돈 정산과는 별개) */
+function mustDoRows(ds) {
+  const row = state.mustdos && state.mustdos[ds];
+  return Array.isArray(row) ? row : [];
+}
+function mustDosFor(ds) {
+  return mustDoRows(ds)
+    .filter(m => m && m.id && !m.del)
+    .sort((a, b) => (Number(a.ord) || 0) - (Number(b.ord) || 0));
+}
+function addMustDo(ds, text) {
+  const t = String(text || '').trim().slice(0, 40);
+  if (!t) return false;
+  state.clock = (state.clock || 0) + 1;
+  if (!state.mustdos) state.mustdos = {};
+  if (!state.mustdos[ds]) state.mustdos[ds] = [];
+  const maxOrd = state.mustdos[ds].reduce((a, m) => Math.max(a, Number(m.ord) || 0), 0);
+  state.mustdos[ds].push({
+    id: 'm_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+    text: t,
+    done: false,
+    c: state.clock,
+    ord: maxOrd + 1,
+    at: new Date().toISOString(),
+    del: false
+  });
+  state.updatedAt = Date.now();
+  saveState();
+  return true;
+}
+function toggleMustDo(ds, id) {
+  const m = mustDoRows(ds).find(x => x.id === id);
+  if (!m) return;
+  state.clock = (state.clock || 0) + 1;
+  m.done = !m.done;
+  m.c = state.clock;
+  state.updatedAt = Date.now();
+  saveState();
+}
+function deleteMustDo(ds, id) {
+  const m = mustDoRows(ds).find(x => x.id === id);
+  if (!m) return;
+  state.clock = (state.clock || 0) + 1;
+  m.del = true;
+  m.c = state.clock;
+  state.updatedAt = Date.now();
+  saveState();
 }
 
 function weekSummary(ws) {
@@ -339,6 +412,7 @@ function syncPayload(s) {
     clock: s.clock || 0,
     tasks: s.tasks,
     tasksTs: s.tasksTs || 0,
+    mustdos: s.mustdos || {},
     completions: s.completions,
     settlements: s.settlements,
     settings: s.settings,
@@ -353,6 +427,7 @@ function pickRemote(o) {
     clock: Number(o.clock) || 0,
     tasks: Array.isArray(o.tasks) ? o.tasks : [],
     tasksTs: Number(o.tasksTs) || 0,
+    mustdos: (o.mustdos && typeof o.mustdos === 'object' && !Array.isArray(o.mustdos)) ? o.mustdos : {},
     completions: (o.completions && typeof o.completions === 'object') ? o.completions : {},
     settlements: Array.isArray(o.settlements) ? o.settlements : [],
     settings: o.settings || {},
@@ -400,6 +475,21 @@ function mergeStates(local, remote) {
     if (Object.keys(row).length) comp[ds] = row;
   });
   out.completions = comp;
+  const must = {};
+  const mustDates = new Set(Object.keys(local.mustdos || {}).concat(Object.keys(remote.mustdos || {})));
+  mustDates.forEach(ds => {
+    const a = (local.mustdos || {})[ds] || [];
+    const b = (remote.mustdos || {})[ds] || [];
+    const byId = {};
+    (Array.isArray(a) ? a : []).concat(Array.isArray(b) ? b : []).forEach(m => {
+      if (!m || !m.id) return;
+      const cur = byId[m.id];
+      if (!cur || (Number(m.c) || 0) > (Number(cur.c) || 0)) byId[m.id] = m;
+    });
+    const arr = Object.values(byId).sort((x, y) => (Number(x.ord) || 0) - (Number(y.ord) || 0));
+    if (arr.length) must[ds] = arr;
+  });
+  out.mustdos = must;
   const map = {};
   (local.settlements || []).concat(remote.settlements || []).forEach(s => {
     if (!s || !s.id) return;
@@ -663,6 +753,33 @@ function progressMessage(done, total, isToday, isPast) {
   return '하나씩 잘 해내고 있어요!';
 }
 
+function renderMustDo() {
+  const ds = todayStr();
+  const items = mustDosFor(ds);
+  const done = items.filter(m => m.done).length;
+  const sub = $('#mustDoSub');
+  const list = $('#mustDoList');
+  if (sub) {
+    if (!items.length) sub.textContent = '오늘 꼭 할 일을 적어 봐요';
+    else if (done === items.length) sub.textContent = '모두 끝났어요! 고양이가 박수 쳐요 👏';
+    else sub.textContent = items.length + '개 중 ' + done + '개 했어요';
+  }
+  if (!list) return;
+  if (!items.length) {
+    list.innerHTML = '<li class="mustdo-empty"><img src="assets/cat-sleep.webp" alt="" width="58" height="47"><span>아직 적은 일이 없어요.<br>오늘 꼭 해야 할 일을 적어 보세요.</span></li>';
+    return;
+  }
+  list.innerHTML = items.map(m =>
+    '<li class="mustdo-item' + (m.done ? ' done' : '') + '">' +
+    '<button class="mustdo-check" type="button" data-must-toggle="' + esc(m.id) + '" aria-pressed="' + m.done +
+    '" aria-label="' + esc(m.text) + (m.done ? ' 완료 취소' : ' 완료') + '">' +
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
+    '<span class="mustdo-text">' + esc(m.text) + '</span>' +
+    '<button class="mustdo-del" type="button" data-must-del="' + esc(m.id) + '" aria-label="' + esc(m.text) + ' 지우기">✕</button>' +
+    '</li>'
+  ).join('');
+}
+
 function renderKid() {
   updateSoundBtn();
   const today = todayStr();
@@ -670,8 +787,12 @@ function renderKid() {
   const sum = weekSummary(ws);
   const now = new Date();
 
-  $('#todayLabel').textContent = (now.getMonth() + 1) + '월 ' + now.getDate() + '일 ' + DAY_FULL[mondayIndex(now)];
+  $('#todayDate').textContent = now.getFullYear() + '년 ' + (now.getMonth() + 1) + '월 ' + now.getDate() + '일';
+  $('#todayDow').textContent = '(' + DAY_NAMES[mondayIndex(now)] + ')';
+  const dow = mondayIndex(now);
+  $('#dateSub').textContent = DAY_FULL[dow] + (dow === 6 ? ' · 오늘은 정산날이에요' : ' · 일요일까지 ' + (6 - dow) + '일 남았어요');
   $('#greeting').textContent = greetText();
+  renderMustDo();
 
   // 히어로 금액 / 안내문
   animateAmount(sum.remaining);
@@ -1512,6 +1633,28 @@ function bindEvents() {
   });
 
   $('#installHintBtn').addEventListener('click', openInstallSheet);
+
+  // 아이: 오늘 꼭 해야 할 일
+  $('#mustDoForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const inp = $('#mustDoInput');
+    if (!inp) return;
+    const text = inp.value.trim();
+    if (!text) { toast('할 일을 적어 주세요', 1300); inp.focus(); return; }
+    if (mustDosFor(todayStr()).length >= 30) { toast('오늘은 30개까지만 적을 수 있어요', 1600); return; }
+    if (addMustDo(todayStr(), text)) {
+      inp.value = '';
+      renderMustDo();
+      toast('오늘 꼭 할 일에 담았어요', 1300);
+    }
+  });
+
+  $('#mustDoList').addEventListener('click', e => {
+    const del = e.target.closest('[data-must-del]');
+    if (del) { deleteMustDo(todayStr(), del.dataset.mustDel); renderMustDo(); return; }
+    const tog = e.target.closest('[data-must-toggle]');
+    if (tog) { toggleMustDo(todayStr(), tog.dataset.mustToggle); renderMustDo(); }
+  });
 
   // 부모님: 할 일
   $('#tabTasks').addEventListener('click', e => {

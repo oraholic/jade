@@ -525,6 +525,70 @@ h1,h2,h3,p{margin:0}
 .pin-help{font-size:10px;font-weight:600;color:#B6A497;margin-top:14px;line-height:1.5}
 .pin-help b{color:#8C6D5B}
 
+/* ---------- 아이: 날짜 헤더 ---------- */
+.kid-brand{display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:900;color:#A87A62;letter-spacing:-.01em}
+.kid-brand .brand-paw{font-size:13px}
+.date-head{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin:0 2px 12px}
+.date-copy{min-width:0}
+.date-kicker{font-size:10.5px;font-weight:900;color:#C08B70;letter-spacing:.16em}
+.date-big{font-size:22.5px;font-weight:900;letter-spacing:-.045em;color:#3E2B22;line-height:1.2;margin-top:2px;word-break:keep-all}
+.date-big em{font-style:normal;font-size:16.5px;font-weight:900;color:#E0643F;margin-left:1px;letter-spacing:-.02em}
+.date-sub{margin-top:3px;font-size:11px;font-weight:700;color:#A2765F;line-height:1.4}
+.date-cat{width:92px;height:auto;flex:none;margin-bottom:-4px;transform:rotate(-3deg);filter:drop-shadow(0 8px 12px rgba(200,120,90,.16))}
+
+/* ---------- 아이: 오늘 꼭 해야 할 일 ---------- */
+.mustdo{
+  background:#fff;border-radius:24px;padding:13px 14px 12px;margin-bottom:12px;
+  box-shadow:var(--shadow-sm);border:1.5px solid rgba(255,175,131,.30);
+}
+.mustdo-head{display:flex;align-items:center;gap:8px;min-height:44px}
+.mustdo-cat{
+  width:62px;height:auto;flex:none;margin-top:-24px;margin-bottom:-4px;
+  filter:drop-shadow(0 5px 8px rgba(200,120,90,.16));
+}
+.mustdo-copy{min-width:0;padding-top:2px}
+.mustdo-title{font-size:15px;font-weight:900;letter-spacing:-.03em;color:#4A3229}
+.mustdo-sub{font-size:11px;font-weight:700;color:#A2806E;margin-top:2px;line-height:1.4}
+.mustdo-list{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.mustdo-item{
+  display:flex;align-items:center;gap:9px;background:#FFF8F3;border-radius:14px;padding:8px 9px;
+  border:1px solid rgba(255,175,131,.22);
+}
+.mustdo-check{
+  width:26px;height:26px;flex:none;border-radius:50%;border:2px solid #FFC9B4;background:#fff;
+  display:grid;place-items:center;padding:0;cursor:pointer;transition:background .18s,border-color .18s,transform .12s;
+}
+.mustdo-check:active{transform:scale(.9)}
+.mustdo-check svg{
+  width:15px;height:15px;stroke:#fff;stroke-width:3.2;fill:none;opacity:0;transform:scale(.5);
+  transition:opacity .16s,transform .2s cubic-bezier(.2,1.4,.4,1);
+}
+.mustdo-item.done .mustdo-check{background:linear-gradient(140deg,#FFC46B,#FF9B4E);border-color:transparent}
+.mustdo-item.done .mustdo-check svg{opacity:1;transform:scale(1)}
+.mustdo-text{flex:1;min-width:0;font-size:13px;font-weight:800;color:#4A3830;line-height:1.4;word-break:keep-all;overflow-wrap:anywhere}
+.mustdo-item.done .mustdo-text{color:#AE9A8C;text-decoration:line-through;text-decoration-thickness:1.5px;text-decoration-color:rgba(174,154,140,.65)}
+.mustdo-del{border:0;background:none;color:#CDB6A7;font-size:12px;font-weight:900;padding:5px 3px;cursor:pointer;flex:none;line-height:1}
+.mustdo-del:active{transform:scale(.9)}
+.mustdo-empty{
+  display:flex;align-items:center;gap:8px;background:#FFFAF5;border-radius:14px;padding:8px 10px;
+  font-size:11.5px;font-weight:700;color:#A2907F;line-height:1.5;
+}
+.mustdo-empty img{width:52px;height:auto;flex:none}
+.mustdo-form{display:flex;gap:7px;margin-top:9px}
+.mustdo-input{
+  flex:1;min-width:0;border:1.5px solid rgba(184,144,124,.20);background:#FFFCFA;border-radius:13px;
+  padding:10px 12px;font-size:13px;font-weight:700;font-family:inherit;color:#45332B;outline:none;
+  transition:border-color .2s,box-shadow .2s;
+}
+.mustdo-input:focus{border-color:#FFB094;box-shadow:0 0 0 3px rgba(255,138,107,.12)}
+.mustdo-input::placeholder{color:#C4B3A6;font-weight:600}
+.mustdo-add{
+  width:44px;flex:none;border:0;border-radius:13px;background:linear-gradient(140deg,#FFA585,#FF7A55);
+  color:#fff;font-size:22px;font-weight:900;line-height:1;display:grid;place-items:center;cursor:pointer;
+  box-shadow:0 8px 16px rgba(255,122,85,.28);padding:0 0 3px;
+}
+.mustdo-add:active{transform:scale(.94)}
+
 /* ---------- 반응형 ---------- */
 @media (max-width:360px){
   .phone{padding-left:14px;padding-right:14px}
@@ -533,6 +597,10 @@ h1,h2,h3,p{margin:0}
   .piggy{width:78px;height:78px}
   .piggy svg{width:66px;height:66px}
   .emoji-grid{grid-template-columns:repeat(6,1fr)}
+  .date-big{font-size:19.5px}
+  .date-big em{font-size:14.5px}
+  .date-cat{width:78px}
+  .mustdo-cat{width:54px}
 }
 @media (min-width:560px){
   .phone{margin:22px auto 36px;border-radius:34px;background:rgba(255,252,248,.55);box-shadow:0 30px 80px rgba(190,140,110,.16);padding-top:20px}
