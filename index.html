@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>용돈 챌린지</title>
+<meta name="description" content="초등 3학년 딸의 매일 할 일을 체크하고, 매주 일요일에 용돈을 정산하는 가족 앱">
+<meta name="theme-color" content="#FFF9F2">
+<meta name="color-scheme" content="light">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="용돈 챌린지">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="phone">
+
+  <!-- ===================== 아이 모드 ===================== -->
+  <main id="kidView" class="view">
+    <header class="kid-top">
+      <div class="date-chip" id="todayLabel">오늘</div>
+      <div class="top-actions">
+        <button id="soundBtn" class="icon-btn" type="button" aria-label="소리 켜기 또는 끄기">🔔</button>
+        <button id="parentBtn" class="icon-btn lock" type="button" aria-label="부모님 모드 열기">🔒<span>부모님</span></button>
+      </div>
+    </header>
+
+    <section class="hero">
+      <div class="hero-head">
+        <div class="hero-head-text">
+          <h1 class="greet" id="greeting">안녕!</h1>
+          <p class="hero-sub" id="heroSub">일요일에 정산해요</p>
+        </div>
+        <div class="streak-chip hidden" id="streakChip">🔥 <span id="streakNum">2</span>일</div>
+      </div>
+
+      <div class="bank">
+        <div class="piggy" aria-hidden="true">
+          <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <ellipse cx="50" cy="89" rx="29" ry="4.5" fill="#E9C9B8" opacity=".55"/>
+            <ellipse cx="29" cy="30" rx="8.5" ry="8.5" fill="#FFC9B8"/>
+            <ellipse cx="71" cy="30" rx="8.5" ry="8.5" fill="#FFC9B8"/>
+            <ellipse cx="50" cy="52" rx="33" ry="30" fill="#FFF3EC"/>
+            <ellipse cx="50" cy="60" rx="13.5" ry="10.5" fill="#FFC9B8"/>
+            <ellipse cx="45.5" cy="59.5" rx="2.5" ry="3.4" fill="#E08F7C"/>
+            <ellipse cx="54.5" cy="59.5" rx="2.5" ry="3.4" fill="#E08F7C"/>
+            <circle cx="36" cy="44" r="3.2" fill="#5A4034"/>
+            <circle cx="64" cy="44" r="3.2" fill="#5A4034"/>
+            <circle cx="37" cy="43" r="1" fill="#fff"/>
+            <circle cx="65" cy="43" r="1" fill="#fff"/>
+            <ellipse cx="26" cy="57" rx="6" ry="4" fill="#FFB3A7" opacity=".5"/>
+            <ellipse cx="74" cy="57" rx="6" ry="4" fill="#FFB3A7" opacity=".5"/>
+            <path d="M44.5 68.5c2.2 2.8 8.8 2.8 11 0" stroke="#E08F7C" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+            <circle cx="78" cy="18" r="9.5" fill="#FFD166" stroke="#F2B32E" stroke-width="2"/>
+            <text x="78" y="22.5" font-size="10" text-anchor="middle" fill="#A9620F" font-weight="700" font-family="Arial, sans-serif">₩</text>
+          </svg>
+        </div>
+        <div class="bank-info">
+          <div class="bank-label">이번 주 모은 용돈</div>
+          <div class="bank-amount"><span id="weekAmount">0</span><em>원</em></div>
+          <div class="bank-note" id="weekNote">일요일에 부모님과 정산해요</div>
+        </div>
+      </div>
+
+      <div class="weekbars" id="weekBars" aria-label="요일별로 모은 용돈"></div>
+    </section>
+
+    <section class="progress-card">
+      <div class="ring" id="ring"><span id="ringText">0/0</span></div>
+      <div class="progress-text">
+        <div class="progress-title" id="progressTitle">오늘의 할 일</div>
+        <div class="progress-sub" id="progressSub">첫 할 일을 시작해 볼까요?</div>
+      </div>
+      <div class="stamp" id="stamp" aria-hidden="true">🌟</div>
+    </section>
+
+    <div class="daystrip" id="dayStrip" role="tablist" aria-label="요일 선택"></div>
+    <div class="day-hint hidden" id="dayHint"></div>
+
+    <section class="task-list" id="taskList" aria-live="polite"></section>
+
+    <footer class="kid-foot">
+      <span>매주 일요일, 부모님과 용돈을 정산해요</span>
+      <button class="link-btn" id="installHintBtn" type="button">홈 화면에 추가</button>
+    </footer>
+  </main>
+
+  <!-- ===================== 부모님 모드 ===================== -->
+  <section id="parentView" class="view hidden">
+    <header class="parent-top">
+      <div>
+        <h1 class="ph-title">부모님 모드</h1>
+        <p class="ph-sub" id="parentSub">아이: 우리 딸</p>
+      </div>
+      <button class="ghost-btn" id="exitParentBtn" type="button">나가기</button>
+    </header>
+
+    <nav class="ptabs" id="ptabs" aria-label="부모님 메뉴">
+      <button type="button" data-tab="tasks" class="active">할 일</button>
+      <button type="button" data-tab="log">기록</button>
+      <button type="button" data-tab="settle">정산</button>
+      <button type="button" data-tab="settings">설정</button>
+    </nav>
+
+    <div class="tab-panel" id="tabTasks"></div>
+    <div class="tab-panel hidden" id="tabLog"></div>
+    <div class="tab-panel hidden" id="tabSettle"></div>
+    <div class="tab-panel hidden" id="tabSettings"></div>
+  </section>
+
+  <!-- ===================== PIN 입력 ===================== -->
+  <div id="pinGate" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="pinTitle">
+    <div class="pin-card">
+      <div class="pin-lock">🔒</div>
+      <h2 id="pinTitle">부모님 확인</h2>
+      <p class="pin-sub">부모님 PIN 4자리를 입력해 주세요</p>
+      <div class="pin-dots" id="pinDots">
+        <span></span><span></span><span></span><span></span>
+      </div>
+      <div class="keypad" id="keypad"></div>
+      <button class="link-btn" id="pinCancel" type="button">취소</button>
+      <p class="pin-help">처음 PIN은 <b>0000</b>이에요. 부모님 모드 설정에서 바꿀 수 있어요.</p>
+    </div>
+  </div>
+
+  <div id="sheetRoot"></div>
+  <div id="toastRoot" class="toast-root" aria-live="polite"></div>
+  <div id="fxRoot" class="fx-root" aria-hidden="true"></div>
+  <div id="celebrate" class="celebrate hidden"></div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
