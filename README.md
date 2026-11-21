@@ -8,7 +8,7 @@
 ## 바로 쓰기
 
 1. 휴대폰 브라우저에서 아래 주소를 엽니다.
-   - https://oraholic.github.io/allowance-app/
+   - https://oraholic.github.io/jade/
 2. 홈 화면에 추가합니다.
    - **아이폰(Safari)**: 아래 공유 버튼 → **홈 화면에 추가**
    - **안드로이드(Chrome)**: 오른쪽 위 ⋮ → **앱 설치 / 홈 화면에 추가**
