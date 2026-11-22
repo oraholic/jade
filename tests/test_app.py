@@ -43,13 +43,21 @@ SEED_TASKS = [
 ]
 
 # 마이그레이션으로 기존 폰(t1~t14)에 덧붙는 기본 할 일
-BACKFILL_TASK = {"id": "t15", "title": "미래엔 수학 문제집 풀기", "emoji": "📐",
-                 "days": [0, 1, 2, 3, 4, 5, 6], "amount": 100, "order": 15}
+BACKFILL_TASKS = [
+    {"id": "t15", "title": "미래엔 수학 문제집 풀기", "emoji": "📐",
+     "days": [0, 1, 2, 3, 4, 5, 6], "amount": 50, "order": 15},
+    {"id": "t16", "title": "샤워 후 로션 바르기", "emoji": "🧴",
+     "days": [0, 1, 2, 3, 4, 5, 6], "amount": 50, "order": 16},
+]
+BACKFILL_IDS = [t["id"] for t in BACKFILL_TASKS]
+AMOUNT = 50          # v1.2.2부터 할 일 한 번에 50원
+LEGACY_AMOUNT = 100  # 예전 저장본(마이그레이션 확인용)
 
 
 def legacy_state():
+    """v1.2.1까지 쓰던 폰의 저장본: 금액은 100원, 할 일은 t1~t14만."""
     tasks = [
-        {"id": i, "title": t, "emoji": e, "days": d, "amount": 100,
+        {"id": i, "title": t, "emoji": e, "days": d, "amount": LEGACY_AMOUNT,
          "active": True, "repeat": r, "order": n + 1}
         for n, (i, t, e, d, r) in enumerate(SEED_TASKS)
     ]
@@ -60,9 +68,9 @@ def legacy_state():
         "tasksTs": 0,
         "completions": {
             "2026-11-09": {
-                "t1": {"c": 5, "at": "2026-11-09T09:00:00.000Z", "amount": 100,
+                "t1": {"c": 5, "at": "2026-11-09T09:00:00.000Z", "amount": LEGACY_AMOUNT,
                        "title": "아침 양치하기", "emoji": "🪥", "n": 1},
-                "t2": {"c": 6, "at": "2026-11-09T09:05:00.000Z", "amount": 100,
+                "t2": {"c": 6, "at": "2026-11-09T09:05:00.000Z", "amount": LEGACY_AMOUNT,
                        "title": "벗은 옷·양말 빨래통에 넣기", "emoji": "🧺", "n": 2},
             }
         },
@@ -140,20 +148,26 @@ class AppTest(unittest.TestCase):
         ctx, page = self.new_page(seed=legacy_state())
         try:
             st = self.state(page)
-            self.assertEqual(len(st["tasks"]), 15, "기존 14개 + 새로 추가된 t15")
+            self.assertEqual(len(st["tasks"]), 16, "기존 14개 + 새로 추가된 t15·t16")
             titles = [t["title"] for t in st["tasks"]]
             self.assertIn("벗은 옷·양말 빨래통에 넣기", titles)
             self.assertIn("일기 쓰기", titles)
             self.assertEqual([t["id"] for t in st["tasks"]][:14],
                              [i for i, *_ in SEED_TASKS], "기존 t1~t14 순서 그대로")
+            self.assertEqual([t["id"] for t in st["tasks"]][14:], BACKFILL_IDS)
             self.assertEqual(st["pin"], "0000", "부모님 PIN 기본값 유지")
             self.assertEqual(st["completions"]["2026-11-09"]["t2"]["n"], 2,
                              "기존 체크 기록 보존")
-            self.assertEqual(st.get("mustdos") or {}, {}, "새 키는 빈 상태로 시작")
-            self.assertEqual(page.locator("#taskList .task-card[data-task]").count(), 12,
-                             "일요일 할 일 11개 + t15")
+            self.assertEqual(st["completions"]["2026-11-09"]["t2"]["amount"], LEGACY_AMOUNT,
+                             "이미 모은 금액은 그때 금액 그대로")
+            self.assertEqual({t["amount"] for t in st["tasks"]}, {AMOUNT},
+                             "예전 100원 할 일은 50원으로 한 번만 바뀜")
+            self.assertEqual(page.locator("#taskList .task-card[data-task]").count(), 13,
+                             "일요일 할 일 11개 + t15 + t16")
             self.assertEqual(page.locator('#taskList [data-task="t15"]').count(), 1,
                              "기존 폰에도 t15가 자동으로 보여야 함")
+            self.assertEqual(page.locator('#taskList [data-task="t16"]').count(), 1,
+                             "기존 폰에도 샤워 후 로션 바르기가 보여야 함")
         finally:
             ctx.close()
 
@@ -164,14 +178,14 @@ class AppTest(unittest.TestCase):
             self.assertEqual(before.replace(",", ""), "0")
             page.locator("#taskList .task-card").first.click()
             page.wait_for_timeout(900)
-            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "100")
+            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "50")
             # 수시로 하는 일: 누를 때마다 1회씩
             repeat = page.locator('#taskList .task-card[data-task="t2"]')
             repeat.click()
             page.wait_for_timeout(400)
             repeat.click()
             page.wait_for_timeout(900)
-            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "300")
+            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "150")
             st = self.state(page)
             from datetime import date
             today = date.today().isoformat()
@@ -187,16 +201,16 @@ class AppTest(unittest.TestCase):
             for k in "0000":
                 page.click('#keypad [data-key="%s"]' % k)
             page.wait_for_selector("#parentView:not(.hidden)", timeout=4000)
-            self.assertEqual(page.locator("#tabTasks .prow").count(), 15)
+            self.assertEqual(page.locator("#tabTasks .prow").count(), 16)
             self.assertIn("우리 딸", page.inner_text("#parentSub"))
         finally:
             ctx.close()
 
     def test_service_worker_lists_new_assets(self):
         sw = (ROOT / "sw.js").read_text(encoding="utf-8")
-        self.assertIn("allowance-v1.2.1", sw)
+        self.assertIn("allowance-v1.2.2", sw)
         app_js = (ROOT / "app.js").read_text(encoding="utf-8")
-        self.assertIn("const APP_VERSION = '1.2.1'", app_js)
+        self.assertIn("const APP_VERSION = '1.2.2'", app_js)
         for name in ("cat-hero.webp", "cat-peek.webp", "cat-sleep.webp"):
             self.assertIn("./assets/" + name, sw)
             self.assertTrue((ROOT / "assets" / name).is_file(), name + " 파일 존재")
@@ -252,8 +266,8 @@ class AppTest(unittest.TestCase):
                             .evaluate("el => el.classList.contains('done')"))
             self.assertIn("2개 중 1개", page.inner_text("#mustDoSub"))
             page.wait_for_timeout(900)  # 금액 카운트업 애니메이션 종료 대기
-            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "100",
-                             "오늘 꼭 할 일을 체크하면 용돈 100원이 쌓여야 함")
+            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "50",
+                             "오늘 꼭 할 일을 체크하면 용돈 50원이 쌓여야 함")
 
             # 새로고침 후 유지
             page.reload(wait_until="networkidle")
@@ -304,14 +318,16 @@ class AppTest(unittest.TestCase):
             self.assertIn("body", sent, "동기화 PUT 요청이 있어야 함")
             body = sent["body"]
             self.assertIn("mustdos", body)
-            self.assertEqual(len(body["tasks"]), 15)
+            self.assertEqual(len(body["tasks"]), 16)
+            self.assertEqual({t["amount"] for t in body["tasks"]}, {AMOUNT},
+                             "동기화로 올라가는 금액도 50원")
             self.assertTrue(any(m["text"] == "동기화 확인용"
                                 for day in body["mustdos"].values() for m in day))
         finally:
             ctx.close()
 
     def test_mustdo_adds_and_removes_allowance(self):
-        """오늘 꼭 할 일 체크 → 100원 적립, 취소 → 100원 차감 (주간 합계·정산 금액)"""
+        """오늘 꼭 할 일 체크 → 50원 적립, 취소 → 50원 차감 (주간 합계·정산 금액)"""
         ctx, page = self.new_page(seed=legacy_state())
         try:
             def summary():
@@ -328,37 +344,37 @@ class AppTest(unittest.TestCase):
             items.nth(0).click()
             page.wait_for_timeout(950)
             s1 = summary()
-            self.assertEqual(s1["total"], 100)
-            self.assertEqual(s1["remaining"], 100, "정산 금액에도 반영")
-            self.assertEqual(s1["mustTotal"], 100)
+            self.assertEqual(s1["total"], 50)
+            self.assertEqual(s1["remaining"], 50, "정산 금액에도 반영")
+            self.assertEqual(s1["mustTotal"], 50)
             self.assertEqual(s1["mustCount"], 1)
-            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "100")
-            self.assertIn("+100", page.inner_text("#mustDoList .mustdo-item.done"))
+            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "50")
+            self.assertIn("+50", page.inner_text("#mustDoList .mustdo-item.done"))
 
             page.locator("#mustDoList [data-must-toggle]").nth(1).click()
             page.wait_for_timeout(950)
             s2 = summary()
-            self.assertEqual(s2["total"], 200, "두 개 체크하면 200원")
-            self.assertEqual(s2["remaining"], 200)
-            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "200")
+            self.assertEqual(s2["total"], 100, "두 개 체크하면 100원")
+            self.assertEqual(s2["remaining"], 100)
+            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "100")
 
-            # 하나 취소 → 100원 빠짐
+            # 하나 취소 → 50원 빠짐
             page.locator("#mustDoList [data-must-toggle]").nth(0).click()
             page.wait_for_timeout(950)
             s3 = summary()
-            self.assertEqual(s3["total"], 100)
-            self.assertEqual(s3["remaining"], 100)
+            self.assertEqual(s3["total"], 50)
+            self.assertEqual(s3["remaining"], 50)
             self.assertEqual(s3["mustCount"], 1)
-            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "100")
+            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "50")
 
             # 일반 할 일 체크와 합산되고, 삭제하면 금액도 사라짐
             page.locator("#taskList .task-card").first.click()
             page.wait_for_timeout(950)
-            self.assertEqual(summary()["total"], 200, "할 일 100 + 꼭 할 일 100")
+            self.assertEqual(summary()["total"], 100, "할 일 50 + 꼭 할 일 50")
             page.locator("#mustDoList [data-must-del]").nth(1).click()
             page.wait_for_timeout(950)
             s4 = summary()
-            self.assertEqual(s4["total"], 100, "체크한 꼭 할 일을 지우면 금액도 빠짐")
+            self.assertEqual(s4["total"], 50, "체크한 꼭 할 일을 지우면 금액도 빠짐")
             self.assertEqual(s4["mustCount"], 0)
         finally:
             ctx.close()
@@ -424,25 +440,39 @@ class AppTest(unittest.TestCase):
             finally:
                 ctx.close()
 
-    # ---------- 새 기능 (v1.2.1) ----------
-    def test_t15_preset_present_and_pays(self):
-        """미래엔 수학 문제집 풀기: 새 폰·기존 폰 모두에 보이고 100원이 붙어요"""
+    # ---------- 새 기능 (v1.2.2) ----------
+    def test_new_presets_present_and_pay_50(self):
+        """미래엔 수학 문제집 풀기(t15)·샤워 후 로션 바르기(t16): 새 폰·기존 폰 모두에 보이고 50원이 붙어요"""
         ctx, page = self.new_page()
         try:
             st = self.state(page)
             ids = [t["id"] for t in st["tasks"]]
-            self.assertIn("t15", ids, "새 폰 기본 목록에 t15가 있어야 함")
+            for bid in BACKFILL_IDS:
+                self.assertIn(bid, ids, "새 폰 기본 목록에 %s가 있어야 함" % bid)
             t15 = next(t for t in st["tasks"] if t["id"] == "t15")
             self.assertEqual(t15["title"], "미래엔 수학 문제집 풀기")
             self.assertEqual(t15["emoji"], "📐")
             self.assertEqual(t15["days"], [0, 1, 2, 3, 4, 5, 6], "매일")
-            self.assertEqual(t15["amount"], 100)
+            self.assertEqual(t15["amount"], AMOUNT)
             self.assertEqual(t15["order"], 15)
+            t16 = next(t for t in st["tasks"] if t["id"] == "t16")
+            self.assertEqual(t16["title"], "샤워 후 로션 바르기")
+            self.assertEqual(t16["emoji"], "🧴")
+            self.assertEqual(t16["days"], [0, 1, 2, 3, 4, 5, 6], "매일")
+            self.assertEqual(t16["amount"], AMOUNT)
+            self.assertEqual(t16["order"], 16)
             card = page.locator('#taskList [data-task="t15"]')
             self.assertEqual(card.count(), 1)
             self.assertIn("미래엔 수학 문제집 풀기", card.inner_text())
-            self.assertIn("+100", card.inner_text())
+            self.assertIn("+50", card.inner_text())
+            lotion = page.locator('#taskList [data-task="t16"]')
+            self.assertEqual(lotion.count(), 1, "샤워 후 로션 바르기가 보여야 함")
+            self.assertIn("샤워 후 로션 바르기", lotion.inner_text())
+            self.assertIn("+50", lotion.inner_text())
             card.click()
+            page.wait_for_timeout(950)
+            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "50")
+            lotion.click()
             page.wait_for_timeout(950)
             self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "100")
         finally:
@@ -453,13 +483,13 @@ class AppTest(unittest.TestCase):
         try:
             self.seed_store(page, legacy_state())
             st = self.state(page)
-            self.assertEqual([t["id"] for t in st["tasks"]], [i for i, *_ in SEED_TASKS] + ["t15"])
+            self.assertEqual([t["id"] for t in st["tasks"]], [i for i, *_ in SEED_TASKS] + BACKFILL_IDS)
             self.assertEqual(st["completions"]["2026-11-09"]["t2"]["n"], 2, "기존 기록 보존")
             card = page.locator('#taskList [data-task="t15"]')
             self.assertEqual(card.count(), 1, "기존 폰에도 t15가 보여야 함")
             card.click()
             page.wait_for_timeout(950)
-            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "100")
+            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "50")
 
             # 부모님이 지운 기본 할 일은 removedSeeds에 남고 다시 살아나지 않아요
             page.click("#parentBtn")
@@ -467,24 +497,24 @@ class AppTest(unittest.TestCase):
             for k in "0000":
                 page.click('#keypad [data-key="%s"]' % k)
             page.wait_for_selector("#parentView:not(.hidden)", timeout=4000)
-            row = page.locator('#tabTasks .prow[data-id="t15"]')
+            row = page.locator('#tabTasks .prow[data-id="t16"]')
             self.assertEqual(row.count(), 1)
             row.locator('[data-act="del"]').click()
             page.wait_for_selector("#delTask")
             page.click("#delTask")
             page.wait_for_timeout(300)
             st = self.state(page)
-            self.assertNotIn("t15", [t["id"] for t in st["tasks"]])
-            self.assertIn("t15", st.get("removedSeeds") or [])
+            self.assertNotIn("t16", [t["id"] for t in st["tasks"]])
+            self.assertIn("t16", st.get("removedSeeds") or [])
             page.reload(wait_until="networkidle")
             page.wait_for_selector("#taskList .task-card", timeout=8000)
-            self.assertEqual(page.locator('#taskList [data-task="t15"]').count(), 0,
+            self.assertEqual(page.locator('#taskList [data-task="t16"]').count(), 0,
                              "지운 기본 할 일이 마이그레이션으로 되살아나면 안 됨")
         finally:
             ctx.close()
 
     def test_mustdo_also_in_today_list(self):
-        """오늘 꼭 해야 할 일이 아래 ‘오늘의 할 일’에도 같은 체크로 보이고, 100원은 한 번만"""
+        """오늘 꼭 해야 할 일이 아래 ‘오늘의 할 일’에도 같은 체크로 보이고, 50원은 한 번만"""
         ctx, page = self.new_page(seed=legacy_state())
         try:
             self.add_mustdo(page, "수학 숙제 내일 것까지")
@@ -493,7 +523,7 @@ class AppTest(unittest.TestCase):
             txt = cards.first.inner_text()
             self.assertIn("수학 숙제 내일 것까지", txt)
             self.assertIn("오늘 꼭", txt, "오늘 꼭 배지")
-            self.assertIn("+100", txt, "+100원 표시")
+            self.assertIn("+50", txt, "+50원 표시")
             self.assertEqual(page.locator("#taskList .task-divider").count(), 1)
             self.assertIn("오늘 꼭 해야 할 일", page.inner_text("#taskList .task-divider"))
 
@@ -502,7 +532,7 @@ class AppTest(unittest.TestCase):
                     return {total: s.total, mustTotal: s.mustTotal, taskTotal: s.taskTotal,
                             count: s.count, mustCount: s.mustCount}; }""")
 
-            # 아래 목록에서 체크 → 두 목록 모두 체크, 100원 한 번
+            # 아래 목록에서 체크 → 두 목록 모두 체크, 50원 한 번
             page.locator("#taskList [data-must-card]").first.click()
             page.wait_for_timeout(950)
             self.assertTrue(page.locator("#taskList [data-must-card]").first
@@ -511,11 +541,11 @@ class AppTest(unittest.TestCase):
                             .evaluate("el => el.classList.contains('done')"),
                             "위 카드도 함께 체크되어야 함")
             s1 = summary()
-            self.assertEqual(s1["total"], 100)
-            self.assertEqual(s1["mustTotal"], 100)
+            self.assertEqual(s1["total"], 50)
+            self.assertEqual(s1["mustTotal"], 50)
             self.assertEqual(s1["taskTotal"], 0, "mustdo가 할 일 체크로 중복 집계되면 안 됨")
             self.assertEqual(s1["count"], 1)
-            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "100")
+            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "50")
 
             from datetime import date
             today = date.today().isoformat()
@@ -524,7 +554,7 @@ class AppTest(unittest.TestCase):
             self.assertEqual((st.get("completions") or {}).get(today) or {}, {},
                              "mustdo 체크는 completions에 중복 저장하지 않아요")
 
-            # 위 카드에서 취소 → 두 목록 모두 풀리고 100원이 빠짐
+            # 위 카드에서 취소 → 두 목록 모두 풀리고 50원이 빠짐
             page.locator("#mustDoList [data-must-toggle]").first.click()
             page.wait_for_timeout(950)
             self.assertFalse(page.locator("#taskList [data-must-card]").first
@@ -539,8 +569,8 @@ class AppTest(unittest.TestCase):
             page.wait_for_timeout(950)
             self.assertTrue(page.locator("#mustDoList .mustdo-item").first
                             .evaluate("el => el.classList.contains('done')"))
-            self.assertEqual(summary()["total"], 100)
-            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "100")
+            self.assertEqual(summary()["total"], 50)
+            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "50")
         finally:
             ctx.close()
 
@@ -554,7 +584,7 @@ class AppTest(unittest.TestCase):
             self.add_mustdo(page, "체육복 챙기기")
             page.locator("#taskList [data-must-card]").first.click()
             page.wait_for_timeout(950)
-            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "200")
+            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "100")
 
             page.reload(wait_until="networkidle")
             page.wait_for_selector("#taskList .task-card", timeout=8000)
@@ -567,8 +597,8 @@ class AppTest(unittest.TestCase):
                             "아래 목록의 꼭 할 일 체크도 남아야 함")
             self.assertTrue(page.locator("#mustDoList .mustdo-item").first
                             .evaluate("el => el.classList.contains('done')"))
-            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "200")
-            self.assertEqual(page.evaluate("() => weekSummary(currentWeekStart()).total"), 200)
+            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "100")
+            self.assertEqual(page.evaluate("() => weekSummary(currentWeekStart()).total"), 100)
         finally:
             ctx.close()
 
@@ -600,6 +630,106 @@ class AppTest(unittest.TestCase):
             self.assertEqual(comp["t1"]["n"], 1)
             self.assertGreater(bodies[-1].get("clock", 0), 1e12,
                                "clock은 Date.now 기반 단조 증가여야 함")
+        finally:
+            ctx.close()
+
+    def test_rates_migrated_to_50_once(self):
+        """예전 100원 할 일·꼭 할 일은 50원으로 한 번만 바뀌고, 이미 모은 기록은 그대로예요"""
+        seed = legacy_state()
+        from datetime import date
+        today = date.today().isoformat()
+        seed["mustdos"] = {today: [
+            {"id": "m_old1", "text": "체육복 챙기기", "done": False, "amount": LEGACY_AMOUNT,
+             "c": 20, "ord": 1, "at": "2026-11-22T00:00:00.000Z", "del": False},
+        ]}
+        ctx, page = self.new_page(seed=seed)
+        try:
+            st = self.state(page)
+            self.assertEqual({t["amount"] for t in st["tasks"]}, {AMOUNT}, "할 일 금액 50원")
+            self.assertEqual(st["mustdos"][today][0]["amount"], AMOUNT, "꼭 할 일 금액 50원")
+            self.assertEqual(st["completions"]["2026-11-09"]["t1"]["amount"], LEGACY_AMOUNT,
+                             "이미 모은 기록은 그때 금액 그대로")
+            self.assertIn("+50", page.locator('#taskList [data-task="t1"]').inner_text())
+            self.assertIn("+50", page.inner_text("#mustDoList .mustdo-item"))
+            self.assertIn("+50", page.inner_text("#taskList [data-must-card]"))
+
+            # 한 번 바뀐 뒤에는 부모님이 정한 금액을 다시 덮지 않아요
+            migrated = self.state(page)
+            for t in migrated["tasks"]:
+                if t["id"] == "t1":
+                    t["amount"] = 70
+            ctx2, page2 = self.new_page()
+            try:
+                self.seed_store(page2, migrated)
+                st2 = self.state(page2)
+                self.assertEqual(next(t for t in st2["tasks"] if t["id"] == "t1")["amount"], 70,
+                                 "마이그레이션은 한 번만")
+                self.assertIn("+70", page2.locator('#taskList [data-task="t1"]').inner_text())
+            finally:
+                ctx2.close()
+        finally:
+            ctx.close()
+
+    def test_duplicate_tasks_merged(self):
+        """같은 이름(공백·기호 무시) 할 일은 하나로 합쳐지고 체크 기록은 남는 쪽으로 옮겨져요"""
+        seed = legacy_state()
+        from datetime import date
+        today = date.today().isoformat()
+        seed["tasks"].append({"id": "t_dup", "title": "일기쓰기", "emoji": "📝",
+                              "days": [6], "amount": LEGACY_AMOUNT, "active": True,
+                              "repeat": False, "order": 20})
+        seed["completions"][today] = {
+            "t_dup": {"c": 9999999999999, "at": "2026-11-22T00:00:00.000Z",
+                      "amount": LEGACY_AMOUNT, "title": "일기쓰기", "emoji": "📝", "n": 1},
+        }
+        ctx, page = self.new_page(seed=seed)
+        try:
+            st = self.state(page)
+            keys = [re.sub(r"\s+", "", t["title"]) for t in st["tasks"]]
+            self.assertEqual(len(keys), len(set(keys)), "같은 이름의 할 일이 둘 남으면 안 됨")
+            self.assertNotIn("t_dup", [t["id"] for t in st["tasks"]])
+            self.assertEqual(len([t for t in st["tasks"] if "일기" in t["title"]]), 1)
+            self.assertEqual(page.locator('#taskList [data-task="t14"]').count(), 1)
+            self.assertEqual(page.locator('#taskList [data-task="t_dup"]').count(), 0)
+            self.assertEqual(st["completions"][today]["t14"]["n"], 1,
+                             "합쳐진 쪽 체크 기록은 남는 할 일로 옮겨져야 함")
+            self.assertTrue(page.locator('#taskList [data-task="t14"]')
+                            .evaluate("el => el.classList.contains('done')"))
+        finally:
+            ctx.close()
+
+    def test_duplicate_mustdo_not_shown_twice_in_today_list(self):
+        """꼭 할 일이 그날 할 일과 같은 일이면 아래 ‘오늘의 할 일’에 두 번 나오지 않아요"""
+        ctx, page = self.new_page(seed=legacy_state())
+        try:
+            # 일요일: ‘일기 쓰기’(t14)가 있는 날
+            self.add_mustdo(page, "일기 쓰기")
+            self.assertEqual(page.locator("#mustDoList .mustdo-item").count(), 1,
+                             "위 칸에는 그대로 남아요")
+            self.assertEqual(page.locator("#taskList [data-must-card]").count(), 0,
+                             "아래 목록에는 같은 일이 두 번 나오지 않아요")
+            self.assertEqual(page.locator("#taskList .task-divider").count(), 0,
+                             "중복이 하나도 없으면 구분선도 없어요")
+
+            # 겹치지 않는 꼭 할 일은 아래 목록에도 보여요
+            self.add_mustdo(page, "체육복 챙기기")
+            self.assertEqual(page.locator("#taskList [data-must-card]").count(), 1)
+            self.assertIn("체육복 챙기기", page.inner_text("#taskList [data-must-card]"))
+            self.assertEqual(page.locator("#taskList .task-divider").count(), 1)
+            self.assertEqual(page.locator("#mustDoList .mustdo-item").count(), 2)
+
+            # 오늘 실제로 쓰는 말투(붙여쓰기·줄임말·오타)도 같은 일로 알아봐요
+            for text in ("일기쓰기", "미래엔수학숙제", "어휘력3장", "단꿈이2편", "드딤돌문제집3장"):
+                self.add_mustdo(page, text)
+            self.assertEqual(page.locator("#taskList [data-must-card]").count(), 1,
+                             "할 일과 겹치는 꼭 할 일은 아래 목록에서 빠져야 함")
+            self.assertEqual(page.locator("#mustDoList .mustdo-item").count(), 7,
+                             "위 칸에는 적은 그대로 남아요")
+            self.assertEqual(page.locator("#mustDoList [data-must-toggle]").count(), 7)
+
+            # 새 폰의 할 일 카드는 하나도 줄지 않아요
+            self.assertEqual(page.locator("#taskList .task-card[data-task]").count(), 13,
+                             "일요일 할 일 13개 그대로")
         finally:
             ctx.close()
 

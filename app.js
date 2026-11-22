@@ -7,14 +7,16 @@
 
 /* ---------- 1. 상수 & 유틸 ---------- */
 const LS_KEY = 'allowance-challenge-v1';
-const APP_VERSION = '1.2.1';
-const MUSTDO_AMOUNT = 100;
+const APP_VERSION = '1.2.2';
+const REWARD_DEFAULT = 50;      // 할 일 한 번에 받는 용돈 (예전 100원)
+const MUSTDO_AMOUNT = 50;       // ‘오늘 꼭 해야 할 일’ 한 번에 받는 용돈
+const REWARD_REV = 1;           // 100원 → 50원 요금제로 바뀐 표시 (한 번만 바꿔요)
 const DAY_NAMES = ['월', '화', '수', '목', '금', '토', '일'];
 const DAY_FULL = ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일'];
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
 /* 나중에 기본 목록에 더해진 할 일: 이미 쓰던 폰에도 빠지지 않게 한 번 넣어 줘요.
    (부모님이 지워서 removedSeeds에 기록된 항목은 다시 넣지 않아요.) */
-const SEED_BACKFILL = ['t15'];
+const SEED_BACKFILL = ['t15', 't16'];
 const PASTELS = ['#FFE3D8', '#FFEFC9', '#E3F6EC', '#E9E3FB', '#FFE0E6', '#DDF0FF', '#F3E9DC', '#E6F4D9', '#FFE7D1', '#E7F0FF'];
 const EMOJIS = ['🪥', '🧺', '🧮', '📔', '✏️', '🧩', '📚', '📘', '🩳', '🍽️', '💻', '🎨', '🎹', '🧹', '🚿', '🛏️', '🏃', '🗒️', '🔤', '🧠', '⭐', '❤️', '🐶', '🌱'];
 
@@ -50,21 +52,22 @@ function fmtTime(d) { return d.getHours() + ':' + pad2(d.getMinutes()); }
 function seedTasks() {
   const d = (arr) => arr.slice();
   return [
-    { id: 't1', title: '아침 양치하기', emoji: '🪥', days: d(ALL_DAYS), amount: 100, active: true, order: 1 },
-    { id: 't2', title: '벗은 옷·양말 빨래통에 넣기', emoji: '🧺', days: d(ALL_DAYS), amount: 100, active: true, order: 2, repeat: true },
-    { id: 't3', title: '단꿈e 수학 강의 보기', emoji: '🧮', days: d(ALL_DAYS), amount: 100, active: true, order: 3 },
-    { id: 't4', title: '감사하는 일 적기', emoji: '📔', days: d(ALL_DAYS), amount: 100, active: true, order: 4 },
-    { id: 't5', title: '식사 후 그릇 싱크대에 치우기', emoji: '🍽️', days: d(ALL_DAYS), amount: 100, active: true, order: 5 },
-    { id: 't6', title: '간식·과자 먹은 후 쓰레기 버리기', emoji: '🗑️', days: d(ALL_DAYS), amount: 100, active: true, order: 6 },
-    { id: 't7', title: '공부 후 책상 위 필기구·책 정리하기', emoji: '🗂️', days: d(ALL_DAYS), amount: 100, active: true, order: 7 },
-    { id: 't8', title: '취침 전 휴대폰·태블릿 충전기에 꽂아두기', emoji: '🔌', days: d(ALL_DAYS), amount: 100, active: true, order: 8 },
-    { id: 't9', title: '미래엔 수학 학원 숙제', emoji: '✏️', days: [0, 2, 3], amount: 100, active: true, order: 9 },
-    { id: 't10', title: '플레이팩토 문제집 끝내기', emoji: '🧩', days: [1, 4, 5], amount: 100, active: true, order: 10 },
-    { id: 't11', title: '어휘력 문제집 풀기', emoji: '📚', days: [4, 5, 6], amount: 100, active: true, order: 11 },
-    { id: 't12', title: '디딤돌 문제집 풀기', emoji: '📘', days: [4, 5, 6], amount: 100, active: true, order: 12 },
-    { id: 't13', title: '수영장 가방 수건 빨래통에 넣기', emoji: '🩳', days: [0, 1, 3, 4], amount: 100, active: true, order: 13 },
-    { id: 't14', title: '일기 쓰기', emoji: '📝', days: [6], amount: 100, active: true, order: 14 },
-    { id: 't15', title: '미래엔 수학 문제집 풀기', emoji: '📐', days: d(ALL_DAYS), amount: 100, active: true, order: 15 }
+    { id: 't1', title: '아침 양치하기', emoji: '🪥', days: d(ALL_DAYS), amount: 50, active: true, order: 1 },
+    { id: 't2', title: '벗은 옷·양말 빨래통에 넣기', emoji: '🧺', days: d(ALL_DAYS), amount: 50, active: true, order: 2, repeat: true },
+    { id: 't3', title: '단꿈e 수학 강의 보기', emoji: '🧮', days: d(ALL_DAYS), amount: 50, active: true, order: 3 },
+    { id: 't4', title: '감사하는 일 적기', emoji: '📔', days: d(ALL_DAYS), amount: 50, active: true, order: 4 },
+    { id: 't5', title: '식사 후 그릇 싱크대에 치우기', emoji: '🍽️', days: d(ALL_DAYS), amount: 50, active: true, order: 5 },
+    { id: 't6', title: '간식·과자 먹은 후 쓰레기 버리기', emoji: '🗑️', days: d(ALL_DAYS), amount: 50, active: true, order: 6 },
+    { id: 't7', title: '공부 후 책상 위 필기구·책 정리하기', emoji: '🗂️', days: d(ALL_DAYS), amount: 50, active: true, order: 7 },
+    { id: 't8', title: '취침 전 휴대폰·태블릿 충전기에 꽂아두기', emoji: '🔌', days: d(ALL_DAYS), amount: 50, active: true, order: 8 },
+    { id: 't9', title: '미래엔 수학 학원 숙제', emoji: '✏️', days: [0, 2, 3], amount: 50, active: true, order: 9 },
+    { id: 't10', title: '플레이팩토 문제집 끝내기', emoji: '🧩', days: [1, 4, 5], amount: 50, active: true, order: 10 },
+    { id: 't11', title: '어휘력 문제집 풀기', emoji: '📚', days: [4, 5, 6], amount: 50, active: true, order: 11 },
+    { id: 't12', title: '디딤돌 문제집 풀기', emoji: '📘', days: [4, 5, 6], amount: 50, active: true, order: 12 },
+    { id: 't13', title: '수영장 가방 수건 빨래통에 넣기', emoji: '🩳', days: [0, 1, 3, 4], amount: 50, active: true, order: 13 },
+    { id: 't14', title: '일기 쓰기', emoji: '📝', days: [6], amount: 50, active: true, order: 14 },
+    { id: 't15', title: '미래엔 수학 문제집 풀기', emoji: '📐', days: d(ALL_DAYS), amount: 50, active: true, order: 15 },
+    { id: 't16', title: '샤워 후 로션 바르기', emoji: '🧴', days: d(ALL_DAYS), amount: 50, active: true, order: 16 }
   ];
 }
 
@@ -79,6 +82,7 @@ function defaultState() {
     settlements: [],
     settings: { name: '우리 딸', sound: true },
     settingsTs: 0,
+    rewardRev: REWARD_REV,
     removedSeeds: [],
     pin: '0000',
     pinTs: 0,
@@ -106,13 +110,138 @@ function normTask(t, i) {
   };
 }
 
+/* ---------- 3-1. 할 일 이름 비교 (중복 정리용) ----------
+   같은 일을 두 번 보여주지 않으려고 이름을 느슨하게 비교해요.
+   · 공백·기호를 빼고 소문자로 (‘일기 쓰기’ = ‘일기쓰기’)
+   · 끝의 ‘하기/풀기/쓰기’ 같은 말을 뺀 뒤 비교 (‘샤워하기’ = ‘샤워’)
+   · 글자 두 개씩 견줘 얼마나 비슷한지 (오타·줄임말: ‘드딤돌’ ≈ ‘디딤돌’)
+   · 할 일 이름의 첫 낱말·고유 낱말이 들어 있는지 (‘어휘력3장’ → ‘어휘력 문제집 풀기’) */
+const STEM_SUFFIXES = ['하기', '풀기', '쓰기', '넣기', '보기', '버리기', '적기', '두기', '치우기', '끝내기', '먹기', '바르기', '씻기', '정리하기'];
+
+function textKey(s) {
+  return String(s == null ? '' : s).toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[·•.,:;!?'"“”‘’()\[\]{}~\-_/\\+*&%]/g, '');
+}
+function stemKey(s) {
+  let k = s;
+  for (let i = 0; i < STEM_SUFFIXES.length; i++) {
+    const suf = STEM_SUFFIXES[i];
+    if (k.length > suf.length + 1 && k.slice(-suf.length) === suf) { k = k.slice(0, -suf.length); break; }
+  }
+  return k;
+}
+function bigramDice(a, b) {
+  if (!a || !b) return 0;
+  const A = []; const B = [];
+  for (let i = 0; i < a.length - 1; i++) A.push(a.slice(i, i + 2));
+  for (let i = 0; i < b.length - 1; i++) B.push(b.slice(i, i + 2));
+  if (!A.length || !B.length) return a === b ? 1 : 0;
+  const pool = {};
+  A.forEach(function (g) { pool[g] = (pool[g] || 0) + 1; });
+  let hit = 0;
+  B.forEach(function (g) { if (pool[g] > 0) { hit++; pool[g]--; } });
+  return (2 * hit) / (A.length + B.length);
+}
+/* 꼭 할 일 이름과 할 일 이름이 같은 일을 가리키는지 */
+function sameTaskText(mustText, taskTitle) {
+  const a = textKey(mustText);
+  const b = textKey(taskTitle);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const sa = stemKey(a);
+  const sb = stemKey(b);
+  if (sa === sb) return true;
+  if ((sa.length >= 3 && sb.indexOf(sa) >= 0) || (sb.length >= 3 && sa.indexOf(sb) >= 0)) return true;
+  if (bigramDice(sa, sb) >= 0.5) return true;
+  const head = textKey(String(taskTitle).split(/[\s·]+/)[0] || '');
+  if (head.length >= 3 && a.indexOf(head) === 0) return true;
+  return false;
+}
+/* 할 일 이름에서 고유한 낱말 하나가 꼭 할 일 이름에 들어 있고, 꼭 할 일이 훨씬 길지 않으면 같은 일로 봐요 */
+function taskKeywordMatch(mustText, taskTitle, activeTitles) {
+  const a = textKey(mustText);
+  if (!a) return false;
+  const words = String(taskTitle).split(/[\s·,.]+/).map(function (w) { return textKey(w).replace(/[a-z]/g, ''); })
+    .filter(function (w) { return w.length >= 2; });
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    let unique = true;
+    for (let j = 0; j < activeTitles.length; j++) {
+      if (activeTitles[j] === taskTitle) continue;
+      if (textKey(activeTitles[j]).replace(/[a-z]/g, '').indexOf(w) >= 0) { unique = false; break; }
+    }
+    if (!unique) continue;
+    if (a.indexOf(w) >= 0 && a.length <= w.length + 6) return true;
+  }
+  return false;
+}
+function matchTaskForText(text, dayTasks) {
+  for (let i = 0; i < dayTasks.length; i++) if (sameTaskText(text, dayTasks[i].title)) return dayTasks[i];
+  const titles = state.tasks.filter(function (t) { return t.active; }).map(function (t) { return t.title; });
+  for (let i = 0; i < dayTasks.length; i++) if (taskKeywordMatch(text, dayTasks[i].title, titles)) return dayTasks[i];
+  return null;
+}
+
+/* 같은 이름의 할 일을 하나로 합쳐요 (체크 기록은 남기는 쪽으로 옮겨 붙여요) */
+function dedupeTaskList(tasks) {
+  const byKey = {};
+  const kept = [];
+  const idMap = {};
+  tasks.forEach(function (t) {
+    const k = textKey(t.title);
+    const first = byKey[k];
+    if (!first) { byKey[k] = t; kept.push(t); return; }
+    first.days = Array.from(new Set(first.days.concat(t.days))).sort(function (a, b) { return a - b; });
+    if (t.repeat) first.repeat = true;
+    if (t.active) first.active = true;
+    if (t.order < first.order) first.order = t.order;
+    idMap[t.id] = first.id;
+  });
+  return { tasks: kept, idMap: idMap };
+}
+function remapCompletionIds(completions, idMap) {
+  const froms = Object.keys(idMap);
+  if (!froms.length) return false;
+  let changed = false;
+  Object.keys(completions || {}).forEach(function (ds) {
+    const row = completions[ds];
+    froms.forEach(function (from) {
+      const e = row[from];
+      if (!e) return;
+      const to = idMap[from];
+      const cur = row[to];
+      if (!cur || (Number(e.c) || 0) > (Number(cur.c) || 0)) row[to] = e;
+      delete row[from];
+      changed = true;
+    });
+  });
+  return changed;
+}
+
+/* 예전 100원 요금제로 저장된 할 일·꼭 할 일 금액을 50원으로 한 번만 바꿔요.
+   이미 체크해 모은 기록(completions)은 그때 받은 금액 그대로 둡니다. */
+function migrateAmounts(s) {
+  if (Number(s.rewardRev) >= REWARD_REV) return false;
+  s.tasks.forEach(function (t) { if (Number(t.amount) === 100) t.amount = REWARD_DEFAULT; });
+  Object.keys(s.mustdos || {}).forEach(function (ds) {
+    (s.mustdos[ds] || []).forEach(function (m) { if (Number(m.amount) === 100) m.amount = MUSTDO_AMOUNT; });
+  });
+  s.rewardRev = REWARD_REV;
+  return true;
+}
+
 function normalizeState(raw) {
   const base = defaultState();
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return base;
   const s = Object.assign({}, base, raw);
   s.tasks = Array.isArray(raw.tasks)
     ? raw.tasks.map(normTask).filter(Boolean)
-    : base.tasks;
+    : base.tasks.map(function (t) { return JSON.parse(JSON.stringify(t)); });
+  // 같은 이름의 할 일은 하나로 합치고, 합친 쪽 id의 체크 기록은 남기는 할 일로 옮겨요.
+  const deduped = dedupeTaskList(s.tasks);
+  s.tasks = deduped.tasks;
+  const dupIds = deduped.idMap;
   s.removedSeeds = Array.isArray(raw.removedSeeds) ? raw.removedSeeds.map(String) : [];
   // 이미 쓰던 폰(t1~t14만 저장된 경우)에도 새 기본 할 일을 덧붙여요.
   // 기존 할 일·체크 기록·정산·동기화 설정은 건드리지 않아요.
@@ -120,7 +249,10 @@ function normalizeState(raw) {
     if (s.removedSeeds.indexOf(id) >= 0) return;
     if (s.tasks.some(function (t) { return t.id === id; })) return;
     const seed = base.tasks.find(function (t) { return t.id === id; });
-    if (seed) s.tasks.push(JSON.parse(JSON.stringify(seed)));
+    if (!seed) return;
+    // 같은 이름의 할 일을 부모님이 직접 만들어 뒀다면 두 번 넣지 않아요.
+    if (s.tasks.some(function (t) { return textKey(t.title) === textKey(seed.title); })) return;
+    s.tasks.push(JSON.parse(JSON.stringify(seed)));
   });
   s.mustdos = {};
   if (raw.mustdos && typeof raw.mustdos === 'object' && !Array.isArray(raw.mustdos)) {
@@ -197,11 +329,22 @@ function normalizeState(raw) {
   s.pinTs = Number(raw.pinTs) || 0;
   s.updatedAt = Number(raw.updatedAt) || 0;
   s.deviceId = String(raw.deviceId || base.deviceId);
+  s.rewardRev = Number(raw.rewardRev) || 0;
   s.removedSeeds = s.removedSeeds.filter(function (id) {
     return base.tasks.some(function (t) { return t.id === id; });
   });
+  if (remapCompletionIds(s.completions, dupIds)) { s.clock += 1; s.tasksTs = Math.max(s.tasksTs, s.clock); }
+  // 예전 100원 요금제 → 50원 (한 번만). 이미 모은 기록은 그대로 둬요.
+  if (migrateAmounts(s)) {
+    s.clock = Math.max(s.clock, s.tasksTs) + 1;
+    s.tasksTs = s.clock;
+    s.updatedAt = Date.now();
+    stateMigrated = true;
+  }
   return s;
 }
+
+let stateMigrated = false;
 
 function loadState() {
   let raw = null;
@@ -274,6 +417,12 @@ function mustDosFor(ds) {
     .filter(m => m && m.id && !m.del)
     .sort((a, b) => (Number(a.ord) || 0) - (Number(b.ord) || 0));
 }
+/* 아래 ‘오늘의 할 일’ 목록에 보여 줄 꼭 할 일.
+   그날 하는 할 일과 같은 일이면 아래 목록에는 따로 보여 주지 않아요(한 번만). */
+function mustDosForList(ds) {
+  const dayTasks = tasksForDate(ds);
+  return mustDosFor(ds).filter(function (m) { return !matchTaskForText(m.text, dayTasks); });
+}
 function mustDoAmount(m) {
   const n = Number(m && m.amount);
   return clamp(Math.round(Number.isFinite(n) && n > 0 ? n : MUSTDO_AMOUNT), 0, 100000);
@@ -332,7 +481,7 @@ function weekSummary(ws) {
         taskTotal += (Number(e.amount) || 0) * n;
       }
     });
-    // 오늘 꼭 해야 할 일도 체크하면 용돈이 쌓여요 (기본 100원)
+    // 오늘 꼭 해야 할 일도 체크하면 용돈이 쌓여요 (기본 50원)
     const mustDone = mustDosFor(ds).filter(m => m.done);
     const mustTotal = mustDone.reduce((a, m) => a + mustDoAmount(m), 0);
     const dayTasks = tasksForDate(ds);
@@ -456,6 +605,7 @@ function syncPayload(s) {
     settlements: s.settlements,
     settings: s.settings,
     settingsTs: s.settingsTs || 0,
+    rewardRev: s.rewardRev || 0,
     pin: s.pin,
     pinTs: s.pinTs || 0,
     updatedAt: s.updatedAt || 0
@@ -471,6 +621,7 @@ function pickRemote(o) {
     settlements: Array.isArray(o.settlements) ? o.settlements : [],
     settings: o.settings || {},
     settingsTs: Number(o.settingsTs) || 0,
+    rewardRev: Number(o.rewardRev) || 0,
     pin: o.pin,
     pinTs: Number(o.pinTs) || 0
   };
@@ -484,6 +635,7 @@ function mergeStates(local, remote) {
   if (!remote || typeof remote !== 'object' || Array.isArray(remote)) return local;
   const out = JSON.parse(JSON.stringify(local));
   out.clock = Math.max(local.clock || 0, Number(remote.clock) || 0);
+  out.rewardRev = Math.max(Number(local.rewardRev) || 0, Number(remote.rewardRev) || 0);
   if ((Number(remote.tasksTs) || 0) > (local.tasksTs || 0) && Array.isArray(remote.tasks)) {
     out.tasks = remote.tasks.map(normTask).filter(Boolean);
     out.tasksTs = Number(remote.tasksTs) || 0;
@@ -573,6 +725,13 @@ async function syncNow() {
       remote = await res.json().catch(() => null);
     }
     const merged = mergeStates(state, remote);
+    // 다른 폰에서 예전 100원 목록이 올라와 있어도 50원 목록으로 맞춰요 (한 번만).
+    if (migrateAmounts(merged)) {
+      merged.clock = Math.max(Number(merged.clock) || 0, Number(merged.tasksTs) || 0) + 1;
+      merged.tasksTs = merged.clock;
+      merged.updatedAt = Date.now();
+      stateMigrated = true;
+    }
     const localChanged = stable(syncPayload(merged)) !== stable(syncPayload(state));
     if (localChanged) { state = merged; saveState(false); }
     const needPush = !remote || stable(syncPayload(merged)) !== stable(pickRemote(remote));
@@ -1007,8 +1166,9 @@ function renderKid() {
         '</div>';
     }).join('');
 
-  // ‘오늘 꼭 해야 할 일’도 아래 목록에 함께 보여요 (위 카드와 같은 항목·같은 체크)
-  const mustCards = mustDosFor(sel).map((m, i) => {
+  // ‘오늘 꼭 해야 할 일’도 아래 목록에 함께 보여요 (위 카드와 같은 항목·같은 체크).
+  // 다만 오늘 할 일과 같은 일이면 아래 목록에 두 번 보이지 않게 빠져요.
+  const mustCards = mustDosForList(sel).map((m, i) => {
     const on = !!m.done;
     const mcls = ['task-card', 'mustdo-card'];
     if (on) mcls.push('done');
@@ -1315,7 +1475,7 @@ function openTaskSheet(taskId) {
   const existing = taskId ? state.tasks.find(t => t.id === taskId) : null;
   const draft = existing
     ? { title: existing.title, emoji: existing.emoji, days: existing.days.slice(), amount: existing.amount, active: existing.active, repeat: !!existing.repeat }
-    : { title: '', emoji: '⭐', days: ALL_DAYS.slice(), amount: 100, active: true, repeat: false };
+    : { title: '', emoji: '⭐', days: ALL_DAYS.slice(), amount: REWARD_DEFAULT, active: true, repeat: false };
 
   const body =
     '<div class="field"><label>할 일 이름</label><input id="fTitle" class="input" maxlength="40" placeholder="예: 책 10분 읽기" value="' + esc(draft.title) + '"></div>' +
@@ -1445,7 +1605,7 @@ function openSettleSheet() {
     (sum.settlements.length ? ' (이미 정산 ' + wonU(sum.settledAmount) + ')' : '') + '</p>' +
     '<div class="field" style="margin-top:14px"><label>아이에게 줄 금액</label>' +
     '<div class="amount-row"><input id="settleAmount" class="input" type="number" inputmode="numeric" step="10" min="0" value="' + sum.remaining + '"><span>원</span></div>' +
-    '<div class="quick-row" id="settleQuick"><button type="button" data-add="100">+100원</button><button type="button" data-add="-100">-100원</button><button type="button" data-reset="' + sum.remaining + '">계산대로</button></div></div>' +
+    '<div class="quick-row" id="settleQuick"><button type="button" data-add="50">+50원</button><button type="button" data-add="-50">-50원</button><button type="button" data-reset="' + sum.remaining + '">계산대로</button></div></div>' +
     '<div class="field"><label>메모 (선택)</label><input id="settleNote" class="input" maxlength="40" placeholder="예: 일요일 저녁 현금으로 줌"></div>' +
     '<label class="setting-row" style="border:0;padding:4px 0"><div class="sr-main"><div class="sr-title">현금으로 전달했어요</div>' +
     '<div class="sr-sub">이번 주 용돈을 직접 주고 이 화면에 기록해요</div></div>' +
@@ -1813,10 +1973,13 @@ function bindEvents() {
     const text = inp.value.trim();
     if (!text) { toast('할 일을 적어 주세요', 1300); inp.focus(); return; }
     if (mustDosFor(todayStr()).length >= 30) { toast('오늘은 30개까지만 적을 수 있어요', 1600); return; }
+    const dupOf = matchTaskForText(text, tasksForDate(todayStr()));
     if (addMustDo(todayStr(), text)) {
       inp.value = '';
       renderKid(); // 위 카드와 아래 ‘오늘의 할 일’ 목록에 함께 보여요
-      toast('오늘 꼭 할 일에 담았어요', 1300);
+      toast(dupOf
+        ? '오늘 할 일에 이미 있어요. 아래 목록에는 한 번만 보여요'
+        : '오늘 꼭 할 일에 담았어요', 1300);
     }
   });
 
@@ -2039,8 +2202,9 @@ function boot() {
   ui.todayCache = todayStr();
   const hooked = connectFromSyncHash();
   if (!hooked) renderAll();
-  // 기본 목록 마이그레이션(t15 등) 결과를 이 폰에도 바로 저장해 둬요
+  // 기본 목록 마이그레이션(t15·t16, 50원 요금제) 결과를 이 폰에도 바로 저장해 둬요
   saveState(false);
+  if (stateMigrated && state.sync.enabled) schedulePush();
 
   setInterval(() => {
     if (document.hidden) return;
