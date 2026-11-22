@@ -7,11 +7,14 @@
 
 /* ---------- 1. 상수 & 유틸 ---------- */
 const LS_KEY = 'allowance-challenge-v1';
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.2.1';
 const MUSTDO_AMOUNT = 100;
 const DAY_NAMES = ['월', '화', '수', '목', '금', '토', '일'];
 const DAY_FULL = ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일'];
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
+/* 나중에 기본 목록에 더해진 할 일: 이미 쓰던 폰에도 빠지지 않게 한 번 넣어 줘요.
+   (부모님이 지워서 removedSeeds에 기록된 항목은 다시 넣지 않아요.) */
+const SEED_BACKFILL = ['t15'];
 const PASTELS = ['#FFE3D8', '#FFEFC9', '#E3F6EC', '#E9E3FB', '#FFE0E6', '#DDF0FF', '#F3E9DC', '#E6F4D9', '#FFE7D1', '#E7F0FF'];
 const EMOJIS = ['🪥', '🧺', '🧮', '📔', '✏️', '🧩', '📚', '📘', '🩳', '🍽️', '💻', '🎨', '🎹', '🧹', '🚿', '🛏️', '🏃', '🗒️', '🔤', '🧠', '⭐', '❤️', '🐶', '🌱'];
 
@@ -60,7 +63,8 @@ function seedTasks() {
     { id: 't11', title: '어휘력 문제집 풀기', emoji: '📚', days: [4, 5, 6], amount: 100, active: true, order: 11 },
     { id: 't12', title: '디딤돌 문제집 풀기', emoji: '📘', days: [4, 5, 6], amount: 100, active: true, order: 12 },
     { id: 't13', title: '수영장 가방 수건 빨래통에 넣기', emoji: '🩳', days: [0, 1, 3, 4], amount: 100, active: true, order: 13 },
-    { id: 't14', title: '일기 쓰기', emoji: '📝', days: [6], amount: 100, active: true, order: 14 }
+    { id: 't14', title: '일기 쓰기', emoji: '📝', days: [6], amount: 100, active: true, order: 14 },
+    { id: 't15', title: '미래엔 수학 문제집 풀기', emoji: '📐', days: d(ALL_DAYS), amount: 100, active: true, order: 15 }
   ];
 }
 
@@ -75,6 +79,7 @@ function defaultState() {
     settlements: [],
     settings: { name: '우리 딸', sound: true },
     settingsTs: 0,
+    removedSeeds: [],
     pin: '0000',
     pinTs: 0,
     sync: { url: '', code: '', enabled: false, lastSync: null },
@@ -108,6 +113,15 @@ function normalizeState(raw) {
   s.tasks = Array.isArray(raw.tasks)
     ? raw.tasks.map(normTask).filter(Boolean)
     : base.tasks;
+  s.removedSeeds = Array.isArray(raw.removedSeeds) ? raw.removedSeeds.map(String) : [];
+  // 이미 쓰던 폰(t1~t14만 저장된 경우)에도 새 기본 할 일을 덧붙여요.
+  // 기존 할 일·체크 기록·정산·동기화 설정은 건드리지 않아요.
+  SEED_BACKFILL.forEach(function (id) {
+    if (s.removedSeeds.indexOf(id) >= 0) return;
+    if (s.tasks.some(function (t) { return t.id === id; })) return;
+    const seed = base.tasks.find(function (t) { return t.id === id; });
+    if (seed) s.tasks.push(JSON.parse(JSON.stringify(seed)));
+  });
   s.mustdos = {};
   if (raw.mustdos && typeof raw.mustdos === 'object' && !Array.isArray(raw.mustdos)) {
     Object.keys(raw.mustdos).forEach(function (ds) {
@@ -183,6 +197,9 @@ function normalizeState(raw) {
   s.pinTs = Number(raw.pinTs) || 0;
   s.updatedAt = Number(raw.updatedAt) || 0;
   s.deviceId = String(raw.deviceId || base.deviceId);
+  s.removedSeeds = s.removedSeeds.filter(function (id) {
+    return base.tasks.some(function (t) { return t.id === id; });
+  });
   return s;
 }
 
@@ -211,12 +228,17 @@ function saveState(push = true) {
 }
 
 function touch(kind) {
-  state.clock = (state.clock || 0) + 1;
+  state.clock = nextClock();
   if (kind === 'tasks') state.tasksTs = state.clock;
   if (kind === 'settings') state.settingsTs = state.clock;
   if (kind === 'pin') state.pinTs = state.clock;
   state.updatedAt = Date.now();
   saveState();
+}
+
+/* 기기 간 시계 차이가 있어도 나중에 한 수정이 항상 이기도록 큰 값으로 올려요 */
+function nextClock() {
+  return Math.max(Date.now(), (Number(state.clock) || 0) + 1);
 }
 
 /* ---------- 4. 조회 ---------- */
@@ -259,7 +281,7 @@ function mustDoAmount(m) {
 function addMustDo(ds, text) {
   const t = String(text || '').trim().slice(0, 40);
   if (!t) return false;
-  state.clock = (state.clock || 0) + 1;
+  state.clock = nextClock();
   if (!state.mustdos) state.mustdos = {};
   if (!state.mustdos[ds]) state.mustdos[ds] = [];
   const maxOrd = state.mustdos[ds].reduce((a, m) => Math.max(a, Number(m.ord) || 0), 0);
@@ -280,7 +302,7 @@ function addMustDo(ds, text) {
 function toggleMustDo(ds, id) {
   const m = mustDoRows(ds).find(x => x.id === id);
   if (!m) return;
-  state.clock = (state.clock || 0) + 1;
+  state.clock = nextClock();
   m.done = !m.done;
   m.c = state.clock;
   state.updatedAt = Date.now();
@@ -289,7 +311,7 @@ function toggleMustDo(ds, id) {
 function deleteMustDo(ds, id) {
   const m = mustDoRows(ds).find(x => x.id === id);
   if (!m) return;
-  state.clock = (state.clock || 0) + 1;
+  state.clock = nextClock();
   m.del = true;
   m.c = state.clock;
   state.updatedAt = Date.now();
@@ -358,7 +380,7 @@ function weekSummary(ws) {
 }
 
 function setCheckCount(ds, taskId, count, task) {
-  state.clock = (state.clock || 0) + 1;
+  state.clock = nextClock();
   const c = state.clock;
   const t = task || state.tasks.find(x => x.id === taskId);
   if (!state.completions[ds]) state.completions[ds] = {};
@@ -385,7 +407,7 @@ function setCheck(ds, taskId, on, task) {
 function settleWeek(opts) {
   const ws = currentWeekStart();
   const dates = weekDates(ws);
-  state.clock = (state.clock || 0) + 1;
+  state.clock = nextClock();
   state.settlements.push({
     id: 's_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
     weekStart: ws,
@@ -519,6 +541,8 @@ function mergeStates(local, remote) {
 
 let syncBusy = false;
 let pushTimer = null;
+let pushPending = false;  // 동기화 중에 들어온 요청은 끝난 뒤 다시 보내요
+let pushDirty = false;    // 이 폰에서 아직 서버에 못 올린 변경이 있어요
 
 async function testSync(url, code) {
   const ep = normalizeUrl(url) + '/families/' + encodeURIComponent(code) + '.json';
@@ -537,7 +561,7 @@ async function testSync(url, code) {
 async function syncNow() {
   const ep = syncEndpoint();
   if (!state.sync.enabled || !ep) return { ok: false, reason: 'off' };
-  if (syncBusy) return { ok: false, reason: 'busy' };
+  if (syncBusy) { pushPending = true; return { ok: false, reason: 'busy' }; }
   syncBusy = true;
   try {
     const res = await fetch(ep, { cache: 'no-store' });
@@ -561,6 +585,7 @@ async function syncNow() {
       if (!put.ok) throw new Error('저장 실패 (' + put.status + ')');
     }
     state.sync.lastSync = Date.now();
+    pushDirty = false;
     saveState(false);
     if (localChanged) renderAll();
     return { ok: true, changed: localChanged };
@@ -568,13 +593,41 @@ async function syncNow() {
     return { ok: false, message: String((e && e.message) || e) };
   } finally {
     syncBusy = false;
+    // 동기화 중에 들어온 요청(체크 직후 등)을 놓치지 않고 한 번 더 보내요
+    if (pushPending) {
+      pushPending = false;
+      setTimeout(() => { syncNow(); }, 0);
+    }
   }
 }
 
 function schedulePush() {
   if (!state.sync.enabled) return;
+  pushDirty = true;
   clearTimeout(pushTimer);
-  pushTimer = setTimeout(() => { syncNow(); }, 1200);
+  pushTimer = setTimeout(() => { pushTimer = null; syncNow(); }, 300);
+}
+
+/* 앱을 나가거나 백그라운드로 갈 때: 미뤄 둔 올리기를 바로 보내요 (keepalive) */
+function flushPush() {
+  clearTimeout(pushTimer);
+  pushTimer = null;
+  if (!state.sync.enabled || !pushDirty) return;
+  const ep = syncEndpoint();
+  if (!ep) return;
+  try {
+    const body = JSON.stringify(syncPayload(state));
+    pushDirty = false;
+    fetch(ep, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: body,
+      keepalive: true,
+      cache: 'no-store'
+    }).catch(() => { pushDirty = true; });
+  } catch (e) {
+    pushDirty = true;
+  }
 }
 
 /* 1탭 동기화 링크: #sync=<base64(JSON {url, code})> 또는 #sync=<URL인코딩 JSON> */
@@ -929,13 +982,9 @@ function renderKid() {
     hint.classList.add('hidden');
   }
 
-  // 할 일 카드
+  // 할 일 카드 (+ 오늘 꼭 해야 할 일도 같은 목록에, 같은 체크로)
   const list = $('#taskList');
-  if (!selTasks.length) {
-    list.innerHTML = '<div class="empty-card"><span class="big">🌈</span>' +
-      (isToday ? '오늘은 할 일이 없어요.<br>부모님이 할 일을 추가하면 여기에 보여요.' : '이 날은 할 일이 없어요.') + '</div>';
-  } else {
-    list.innerHTML = selTasks.map((t, i) => {
+  const taskCards = selTasks.map((t, i) => {
       const n = getCount(sel, t.id);
       const d = n > 0;
       const cls = ['task-card'];
@@ -957,6 +1006,27 @@ function renderKid() {
         ctrl +
         '</div>';
     }).join('');
+
+  // ‘오늘 꼭 해야 할 일’도 아래 목록에 함께 보여요 (위 카드와 같은 항목·같은 체크)
+  const mustCards = mustDosFor(sel).map((m, i) => {
+    const on = !!m.done;
+    const mcls = ['task-card', 'mustdo-card'];
+    if (on) mcls.push('done');
+    if (!isToday) mcls.push('locked');
+    return '<div class="' + mcls.join(' ') + '" role="button" tabindex="0" data-must-card="' + esc(m.id) + '" aria-label="' + esc(m.text) + (on ? ' 완료 취소' : ' 완료') + '" style="--pastel:' + PASTELS[(selTasks.length + i) % PASTELS.length] + '">' +
+      '<span class="t-emoji">📌</span>' +
+      '<span class="t-main"><span class="t-title">' + esc(m.text) + '</span>' +
+      '<span class="t-meta">' + (on ? '완료! ' : '완료하면 ') + '<b>+' + wonU(mustDoAmount(m)) + '</b>' +
+      '<em class="md-badge">오늘 꼭</em></span></span>' +
+      '<span class="t-check"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>' +
+      '</div>';
+  }).join('');
+  const html = taskCards + (mustCards ? '<div class="task-divider"><span>📌 오늘 꼭 해야 할 일</span></div>' + mustCards : '');
+  if (!html) {
+    list.innerHTML = '<div class="empty-card"><span class="big">🌈</span>' +
+      (isToday ? '오늘은 할 일이 없어요.<br>부모님이 할 일을 추가하면 여기에 보여요.' : '이 날은 할 일이 없어요.') + '</div>';
+  } else {
+    list.innerHTML = html;
   }
 }
 
@@ -1008,6 +1078,31 @@ function onTaskTap(taskId, cardEl, undo) {
     setCheck(ds, taskId, false, task);
     renderKid();
     toast('체크를 취소했어요');
+  }
+}
+
+/* 오늘 꼭 해야 할 일 체크 — 위 카드와 아래 ‘오늘의 할 일’ 목록이 같은 항목을 함께 켜고 꺼요.
+   용돈은 weekSummary가 mustdos에서 한 번만 계산해요(할 일 체크로 중복 집계하지 않음). */
+function toggleMustDoRow(id, el) {
+  const ds = ui.selectedDate || todayStr();
+  const today = todayStr();
+  if (ds !== today) { toast(ds < today ? '지난 날은 볼 수만 있어요' : '아직 오지 않은 날이에요'); return; }
+  const before = mustDosFor(ds).find(x => x.id === id);
+  if (!before) return;
+  let rect = null;
+  try { rect = el.getBoundingClientRect(); } catch (e) { rect = null; }
+  toggleMustDo(ds, id);
+  renderKid(); // 위 카드와 아래 목록을 동시에 다시 그려요
+  const after = mustDosFor(ds).find(x => x.id === id);
+  if (after && after.done) {
+    if (rect) {
+      gainFx(rect.left + rect.width / 2, rect.top + rect.height / 2, mustDoAmount(after));
+      sparkle(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    }
+    playChime();
+    toast('오늘 꼭 할 일 완료! +' + wonU(mustDoAmount(after)), 1400);
+  } else if (before.done) {
+    toast('체크를 취소했어요', 1200);
   }
 }
 
@@ -1327,6 +1422,10 @@ function confirmDeleteTask(taskId) {
     footer: '<button class="btn ghost" type="button" data-close>취소</button><button class="btn danger" id="delTask" type="button">지우기</button>',
     onMount: function (api) {
       api.root.querySelector('#delTask').addEventListener('click', () => {
+        if (seedTasks().some(x => x.id === taskId)) {
+          if (!Array.isArray(state.removedSeeds)) state.removedSeeds = [];
+          if (state.removedSeeds.indexOf(taskId) < 0) state.removedSeeds.push(taskId);
+        }
         state.tasks = state.tasks.filter(x => x.id !== taskId);
         touch('tasks');
         api.close();
@@ -1403,7 +1502,7 @@ function deleteSettlement(id) {
     footer: '<button class="btn ghost" type="button" data-close>취소</button><button class="btn danger" id="delSettle" type="button">지우기</button>',
     onMount: function (api) {
       api.root.querySelector('#delSettle').addEventListener('click', () => {
-        state.clock = (state.clock || 0) + 1;
+        state.clock = nextClock();
         s.del = true;
         s.c = state.clock;
         saveState();
@@ -1678,6 +1777,8 @@ function bindEvents() {
   });
 
   $('#taskList').addEventListener('click', e => {
+    const must = e.target.closest('[data-must-card]');
+    if (must) { toggleMustDoRow(must.dataset.mustCard, must); return; }
     const undo = e.target.closest('[data-undo]');
     if (undo) {
       const card = undo.closest('[data-task]');
@@ -1690,6 +1791,12 @@ function bindEvents() {
   });
   $('#taskList').addEventListener('keydown', e => {
     if (e.key !== 'Enter' && e.key !== ' ') return;
+    const must = e.target.closest('[data-must-card]');
+    if (must && e.target === must) {
+      e.preventDefault();
+      toggleMustDoRow(must.dataset.mustCard, must);
+      return;
+    }
     const card = e.target.closest('[data-task]');
     if (!card || e.target !== card) return;
     e.preventDefault();
@@ -1708,7 +1815,7 @@ function bindEvents() {
     if (mustDosFor(todayStr()).length >= 30) { toast('오늘은 30개까지만 적을 수 있어요', 1600); return; }
     if (addMustDo(todayStr(), text)) {
       inp.value = '';
-      renderMustDo();
+      renderKid(); // 위 카드와 아래 ‘오늘의 할 일’ 목록에 함께 보여요
       toast('오늘 꼭 할 일에 담았어요', 1300);
     }
   });
@@ -1718,24 +1825,7 @@ function bindEvents() {
     if (del) { deleteMustDo(todayStr(), del.dataset.mustDel); renderKid(); return; }
     const tog = e.target.closest('[data-must-toggle]');
     if (!tog) return;
-    const id = tog.dataset.mustToggle;
-    const before = mustDosFor(todayStr()).find(x => x.id === id);
-    const wasDone = !!(before && before.done);
-    let rect = null;
-    try { rect = tog.getBoundingClientRect(); } catch (err) { rect = null; }
-    toggleMustDo(todayStr(), id);
-    renderKid();
-    const after = mustDosFor(todayStr()).find(x => x.id === id);
-    if (after && after.done) {
-      if (rect) {
-        gainFx(rect.left + rect.width / 2, rect.top + rect.height / 2, mustDoAmount(after));
-        sparkle(rect.left + rect.width / 2, rect.top + rect.height / 2);
-      }
-      playChime();
-      toast('오늘 꼭 할 일 완료! +' + wonU(mustDoAmount(after)), 1400);
-    } else if (wasDone) {
-      toast('체크를 취소했어요', 1200);
-    }
+    toggleMustDoRow(tog.dataset.mustToggle, tog);
   });
 
   // 부모님: 할 일
@@ -1838,14 +1928,19 @@ function bindEvents() {
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       ui.hiddenAt = Date.now();
+      flushPush(); // 폰을 나가기 직전에는 미루지 말고 바로 올려요
       return;
     }
     if (ui.mode === 'parent' && ui.hiddenAt && Date.now() - ui.hiddenAt > 5 * 60 * 1000) {
       lockParent();
       toast('부모님 모드를 잠갔어요', 1600);
     }
+    // 다시 들어오면 다른 폰의 최신 기록을 받아 와요
     if (state.sync.enabled) syncNow();
   });
+
+  window.addEventListener('pagehide', () => { flushPush(); });
+  window.addEventListener('pageshow', () => { if (state.sync.enabled) syncNow(); });
 
   window.addEventListener('beforeinstallprompt', e => {
     e.preventDefault();
@@ -1944,6 +2039,8 @@ function boot() {
   ui.todayCache = todayStr();
   const hooked = connectFromSyncHash();
   if (!hooked) renderAll();
+  // 기본 목록 마이그레이션(t15 등) 결과를 이 폰에도 바로 저장해 둬요
+  saveState(false);
 
   setInterval(() => {
     if (document.hidden) return;

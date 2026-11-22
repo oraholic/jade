@@ -1,5 +1,5 @@
 /* 용돈 챌린지 — service worker (오프라인 캐시) */
-const CACHE = 'allowance-v1.2.0';
+const CACHE = 'allowance-v1.2.1';
 const ASSETS = [
   './',
   './index.html',

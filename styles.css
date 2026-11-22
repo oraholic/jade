@@ -209,6 +209,21 @@ h1,h2,h3,p{margin:0}
 }
 .empty-card .big{font-size:30px;display:block;margin-bottom:8px}
 
+/* ‘오늘 꼭 해야 할 일’도 아래 ‘오늘의 할 일’ 목록에 같은 체크로 나타나요 */
+.task-divider{
+  display:flex;align-items:center;gap:8px;margin:2px 2px 0;
+  font-size:11.5px;font-weight:900;color:#B5762F;letter-spacing:-.01em;
+}
+.task-divider::after{content:"";flex:1;height:1px;background:rgba(226,183,120,.45)}
+.task-card.mustdo-card{border-color:rgba(255,196,107,.42);background:#FFFDF7}
+.task-card.mustdo-card.done{background:#FFF7F1;border-color:rgba(255,138,107,.24)}
+.md-badge{
+  display:inline-block;margin-left:4px;padding:2px 7px;border-radius:999px;
+  background:#FFF0D9;color:#B5762F;font-size:10.5px;font-weight:900;font-style:normal;
+  letter-spacing:-.01em;vertical-align:1px;white-space:nowrap;
+}
+.task-card.done .md-badge{background:#F3E7DC;color:#A08C7C}
+
 .kid-foot{
   display:flex;flex-direction:column;align-items:center;gap:8px;margin:20px 0 4px;
   font-size:11px;font-weight:700;color:#B6A497;text-align:center;line-height:1.5;
