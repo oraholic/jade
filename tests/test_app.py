@@ -9,6 +9,7 @@
 확인합니다. 실패가 있으면 0이 아닌 코드로 끝납니다.
 """
 import json
+import base64
 import os
 import re
 import threading
@@ -178,7 +179,7 @@ class AppTest(unittest.TestCase):
 
     def test_service_worker_lists_new_assets(self):
         sw = (ROOT / "sw.js").read_text(encoding="utf-8")
-        self.assertIn("allowance-v1.1.0", sw)
+        self.assertIn("allowance-v1.2.0", sw)
         for name in ("cat-hero.webp", "cat-peek.webp", "cat-sleep.webp"):
             self.assertIn("./assets/" + name, sw)
             self.assertTrue((ROOT / "assets" / name).is_file(), name + " 파일 존재")
@@ -233,8 +234,9 @@ class AppTest(unittest.TestCase):
             self.assertTrue(page.locator("#mustDoList .mustdo-item").first
                             .evaluate("el => el.classList.contains('done')"))
             self.assertIn("2개 중 1개", page.inner_text("#mustDoSub"))
-            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "0",
-                             "오늘 꼭 할 일 체크는 용돈 금액에 영향이 없어야 함")
+            page.wait_for_timeout(900)  # 금액 카운트업 애니메이션 종료 대기
+            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "100",
+                             "오늘 꼭 할 일을 체크하면 용돈 100원이 쌓여야 함")
 
             # 새로고침 후 유지
             page.reload(wait_until="networkidle")
@@ -290,6 +292,120 @@ class AppTest(unittest.TestCase):
                                 for day in body["mustdos"].values() for m in day))
         finally:
             ctx.close()
+
+    def test_mustdo_adds_and_removes_allowance(self):
+        """오늘 꼭 할 일 체크 → 100원 적립, 취소 → 100원 차감 (주간 합계·정산 금액)"""
+        ctx, page = self.new_page(seed=legacy_state())
+        try:
+            def summary():
+                return page.evaluate("""() => { const s = weekSummary(currentWeekStart());
+                    return {total: s.total, remaining: s.remaining, count: s.count,
+                            mustTotal: s.mustTotal, mustCount: s.mustCount}; }""")
+
+            self.assertEqual(summary()["total"], 0)
+            self.add_mustdo(page, "수학 숙제 내일 것까지")
+            self.add_mustdo(page, "체육복 챙기기")
+            self.assertEqual(summary()["total"], 0, "체크 전에는 금액이 붙지 않음")
+
+            items = page.locator("#mustDoList [data-must-toggle]")
+            items.nth(0).click()
+            page.wait_for_timeout(950)
+            s1 = summary()
+            self.assertEqual(s1["total"], 100)
+            self.assertEqual(s1["remaining"], 100, "정산 금액에도 반영")
+            self.assertEqual(s1["mustTotal"], 100)
+            self.assertEqual(s1["mustCount"], 1)
+            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "100")
+            self.assertIn("+100", page.inner_text("#mustDoList .mustdo-item.done"))
+
+            page.locator("#mustDoList [data-must-toggle]").nth(1).click()
+            page.wait_for_timeout(950)
+            s2 = summary()
+            self.assertEqual(s2["total"], 200, "두 개 체크하면 200원")
+            self.assertEqual(s2["remaining"], 200)
+            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "200")
+
+            # 하나 취소 → 100원 빠짐
+            page.locator("#mustDoList [data-must-toggle]").nth(0).click()
+            page.wait_for_timeout(950)
+            s3 = summary()
+            self.assertEqual(s3["total"], 100)
+            self.assertEqual(s3["remaining"], 100)
+            self.assertEqual(s3["mustCount"], 1)
+            self.assertEqual(page.inner_text("#weekAmount").replace(",", ""), "100")
+
+            # 일반 할 일 체크와 합산되고, 삭제하면 금액도 사라짐
+            page.locator("#taskList .task-card").first.click()
+            page.wait_for_timeout(950)
+            self.assertEqual(summary()["total"], 200, "할 일 100 + 꼭 할 일 100")
+            page.locator("#mustDoList [data-must-del]").nth(1).click()
+            page.wait_for_timeout(950)
+            s4 = summary()
+            self.assertEqual(s4["total"], 100, "체크한 꼭 할 일을 지우면 금액도 빠짐")
+            self.assertEqual(s4["mustCount"], 0)
+        finally:
+            ctx.close()
+
+    def test_sync_hash_connects_and_cleans_url(self):
+        calls = []
+
+        def handler(route):
+            calls.append((route.request.method, route.request.url))
+            if route.request.method == "PUT":
+                route.fulfill(status=200, content_type="application/json", body='{"ok":true}')
+            else:
+                route.fulfill(status=404, content_type="application/json", body="null")
+
+        payload = base64.urlsafe_b64encode(json.dumps({
+            "url": "https://example-rtdb.firebaseio.com",
+            "code": "gajok-7f3a9ck2"}).encode()).decode().rstrip("=")
+        ctx, page = self.new_page(seed=legacy_state(), route_handler=handler)
+        try:
+            # 실제 1탭 링크를 누른 경우: 새로 열린 화면
+            page.goto("about:blank")
+            page.goto(self.base + "#sync=" + payload, wait_until="networkidle")
+            page.wait_for_selector("#taskList .task-card", timeout=8000)
+            page.wait_for_timeout(2500)
+            st = self.state(page)
+            self.assertTrue(st["sync"]["enabled"], "해시 링크로 동기화가 켜져야 함")
+            self.assertEqual(st["sync"]["url"], "https://example-rtdb.firebaseio.com")
+            self.assertEqual(st["sync"]["code"], "gajok-7f3a9ck2")
+            self.assertEqual(page.evaluate("() => location.hash"), "",
+                             "가족 코드가 주소창에 남으면 안 됨")
+            urls = [u for _, u in calls]
+            self.assertTrue(any("/families/gajok-7f3a9ck2.json" in u for u in urls),
+                            "연결 즉시 Firebase와 동기화해야 함")
+            self.assertTrue(any(m == "PUT" for m, _ in calls), "기록을 올려야 함")
+        finally:
+            ctx.close()
+
+        # 앱이 이미 열려 있는 상태에서 링크를 누른 경우
+        ctx2, page2 = self.new_page(seed=legacy_state(), route_handler=handler)
+        try:
+            self.assertFalse(self.state(page2)["sync"]["enabled"])
+            page2.goto(self.base + "#sync=" + payload, wait_until="networkidle")
+            page2.wait_for_timeout(2500)
+            self.assertTrue(self.state(page2)["sync"]["enabled"],
+                            "이미 열린 앱에서도 해시 링크가 먹혀야 함")
+            self.assertEqual(page2.evaluate("() => location.hash"), "")
+        finally:
+            ctx2.close()
+
+    def test_sync_hash_ignores_bad_payload(self):
+        for bad in ("not-json", base64.urlsafe_b64encode(
+                json.dumps({"url": "http://insecure.example.com",
+                            "code": "gajok-7f3a9ck2"}).encode()).decode().rstrip("="),
+                base64.urlsafe_b64encode(
+                json.dumps({"url": "https://example-rtdb.firebaseio.com",
+                            "code": ""}).encode()).decode().rstrip("=")):
+            ctx, page = self.new_page(seed=legacy_state())
+            try:
+                page.goto(self.base + "#sync=" + bad, wait_until="networkidle")
+                page.wait_for_timeout(300)
+                self.assertFalse(self.state(page)["sync"]["enabled"],
+                                 "잘못된 링크로는 연결되면 안 됨: %s" % bad[:24])
+            finally:
+                ctx.close()
 
     def test_no_horizontal_overflow(self):
         for w in (390, 320):

@@ -7,7 +7,8 @@
 
 /* ---------- 1. 상수 & 유틸 ---------- */
 const LS_KEY = 'allowance-challenge-v1';
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
+const MUSTDO_AMOUNT = 100;
 const DAY_NAMES = ['월', '화', '수', '목', '금', '토', '일'];
 const DAY_FULL = ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일'];
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
@@ -121,6 +122,7 @@ function normalizeState(raw) {
           id: String(m.id || ('m_' + i + '_' + Math.random().toString(36).slice(2, 6))),
           text: text,
           done: !!m.done,
+          amount: clamp(Math.round(Number(m.amount) || MUSTDO_AMOUNT), 0, 100000),
           c: Number(m.c) || 0,
           ord: Number.isFinite(Number(m.ord)) ? Number(m.ord) : i,
           at: String(m.at || ''),
@@ -250,6 +252,10 @@ function mustDosFor(ds) {
     .filter(m => m && m.id && !m.del)
     .sort((a, b) => (Number(a.ord) || 0) - (Number(b.ord) || 0));
 }
+function mustDoAmount(m) {
+  const n = Number(m && m.amount);
+  return clamp(Math.round(Number.isFinite(n) && n > 0 ? n : MUSTDO_AMOUNT), 0, 100000);
+}
 function addMustDo(ds, text) {
   const t = String(text || '').trim().slice(0, 40);
   if (!t) return false;
@@ -261,6 +267,7 @@ function addMustDo(ds, text) {
     id: 'm_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
     text: t,
     done: false,
+    amount: MUSTDO_AMOUNT,
     c: state.clock,
     ord: maxOrd + 1,
     at: new Date().toISOString(),
@@ -294,30 +301,34 @@ function weekSummary(ws) {
   const byDay = dates.map(ds => {
     const row = state.completions[ds] || {};
     const entries = [];
-    let total = 0;
+    let taskTotal = 0;
     Object.keys(row).forEach(tid => {
       const e = row[tid];
       if (e && !e.del) {
         const n = clamp(Math.round(Number(e.n) || 1), 1, 50);
         entries.push(Object.assign({ taskId: tid }, e, { n: n }));
-        total += (Number(e.amount) || 0) * n;
+        taskTotal += (Number(e.amount) || 0) * n;
       }
     });
+    // 오늘 꼭 해야 할 일도 체크하면 용돈이 쌓여요 (기본 100원)
+    const mustDone = mustDosFor(ds).filter(m => m.done);
+    const mustTotal = mustDone.reduce((a, m) => a + mustDoAmount(m), 0);
     const dayTasks = tasksForDate(ds);
     return {
       date: ds,
-      total,
+      total: taskTotal + mustTotal,
+      taskTotal,
+      mustTotal,
+      mustCount: mustDone.length,
       entries,
       doneCount: dayTasks.filter(t => isDone(ds, t.id)).length,
       totalTasks: dayTasks.length
     };
   });
   const byTask = {};
-  let total = 0;
   byDay.forEach(day => {
     day.entries.forEach(e => {
       const n = e.n || 1;
-      total += (Number(e.amount) || 0) * n;
       const t = state.tasks.find(x => x.id === e.taskId);
       const rec = byTask[e.taskId] || (byTask[e.taskId] = {
         taskId: e.taskId,
@@ -332,9 +343,15 @@ function weekSummary(ws) {
   });
   const settlements = state.settlements.filter(s => s.weekStart === ws && !s.del);
   const settledAmount = settlements.reduce((a, s) => a + (Number(s.amount) || 0), 0);
-  const count = byDay.reduce((a, d) => a + d.entries.reduce((x, e) => x + (e.n || 1), 0), 0);
+  const taskTotal = byDay.reduce((a, d) => a + d.taskTotal, 0);
+  const mustTotal = byDay.reduce((a, d) => a + d.mustTotal, 0);
+  const mustCount = byDay.reduce((a, d) => a + d.mustCount, 0);
+  const taskCount = byDay.reduce((a, d) => a + d.entries.reduce((x, e) => x + (e.n || 1), 0), 0);
+  const total = taskTotal + mustTotal;
+  const count = taskCount + mustCount;
   return {
-    ws, dates, byDay, byTask, total, count,
+    ws, dates, byDay, byTask, total, taskTotal, mustTotal,
+    count, taskCount, mustCount,
     settlements, settledAmount,
     remaining: Math.max(0, total - settledAmount)
   };
@@ -560,6 +577,50 @@ function schedulePush() {
   pushTimer = setTimeout(() => { syncNow(); }, 1200);
 }
 
+/* 1탭 동기화 링크: #sync=<base64(JSON {url, code})> 또는 #sync=<URL인코딩 JSON> */
+function decodeSyncHash(hash) {
+  const h = String(hash || '');
+  if (h.indexOf('#sync=') !== 0) return null;
+  const raw = h.slice(6).trim();
+  if (!raw) return null;
+  let obj = null;
+  try {
+    let b = raw.replace(/-/g, '+').replace(/_/g, '/');
+    while (b.length % 4) b += '=';
+    const bin = atob(b);
+    const bytes = Uint8Array.from(bin, ch => ch.charCodeAt(0));
+    obj = JSON.parse(new TextDecoder().decode(bytes));
+  } catch (e1) {
+    try { obj = JSON.parse(decodeURIComponent(raw)); } catch (e2) { obj = null; }
+  }
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
+  const url = normalizeUrl(obj.url || obj.u || '');
+  const code = String(obj.code || obj.c || '').trim().toLowerCase().replace(/[^a-z0-9\-_]/g, '');
+  if (!/^https:\/\/[^\s/]+/i.test(url)) return null;
+  if (!code) return null;
+  return { url: url, code: code };
+}
+
+function applySyncHash() {
+  const cfg = decodeSyncHash(window.location.hash);
+  if (!cfg) return false;
+  state.sync = { url: cfg.url, code: cfg.code, enabled: true, lastSync: null };
+  saveState(false);
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* 주소창 정리 실패 */ }
+  return true;
+}
+
+function connectFromSyncHash() {
+  if (!applySyncHash()) return false;
+  renderAll();
+  toast('가족 동기화를 연결하는 중이에요…', 1600);
+  syncNow().then(r => {
+    if (ui.mode === 'kid') renderKid(); else renderTab();
+    toast(r && r.ok ? '가족 기기와 동기화를 연결했어요' : '동기화를 켰어요. 연결을 확인해 주세요', 2400);
+  });
+  return true;
+}
+
 /* ---------- 6. 효과음 & 애니메이션 ---------- */
 let audioCtx = null;
 function ensureAudio() {
@@ -757,12 +818,13 @@ function renderMustDo() {
   const ds = todayStr();
   const items = mustDosFor(ds);
   const done = items.filter(m => m.done).length;
+  const doneMoney = items.filter(m => m.done).reduce((a, m) => a + mustDoAmount(m), 0);
   const sub = $('#mustDoSub');
   const list = $('#mustDoList');
   if (sub) {
     if (!items.length) sub.textContent = '오늘 꼭 할 일을 적어 봐요';
-    else if (done === items.length) sub.textContent = '모두 끝났어요! 고양이가 박수 쳐요 👏';
-    else sub.textContent = items.length + '개 중 ' + done + '개 했어요';
+    else if (done === items.length) sub.textContent = '모두 끝났어요! 오늘 용돈 +' + wonU(doneMoney) + ' 👏';
+    else sub.textContent = items.length + '개 중 ' + done + '개 했어요' + (done ? ' · +' + wonU(doneMoney) : '');
   }
   if (!list) return;
   if (!items.length) {
@@ -775,6 +837,7 @@ function renderMustDo() {
     '" aria-label="' + esc(m.text) + (m.done ? ' 완료 취소' : ' 완료') + '">' +
     '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
     '<span class="mustdo-text">' + esc(m.text) + '</span>' +
+    '<span class="mustdo-amount' + (m.done ? ' on' : '') + '" aria-hidden="true">+' + wonU(mustDoAmount(m)) + '</span>' +
     '<button class="mustdo-del" type="button" data-must-del="' + esc(m.id) + '" aria-label="' + esc(m.text) + ' 지우기">✕</button>' +
     '</li>'
   ).join('');
@@ -1055,6 +1118,7 @@ function renderLogTab() {
     '</div>' +
     '<div class="log-scroll"><table class="log-table"><thead>' + head + '</thead><tbody>' + body + '</tbody><tfoot>' + foot + '</tfoot></table></div>' +
     '<p class="hint" style="margin:10px 2px 0">칸을 누르면 그날의 체크를 켜고 끌 수 있어요. (부모님 권한)</p>' +
+    (sum.mustTotal ? '<p class="hint" style="margin:4px 2px 0;color:#B5762F">📌 오늘 꼭 한 일 ' + sum.mustCount + '개 · ' + wonU(sum.mustTotal) + ' 포함</p>' : '') +
     (sum.settlements.length ? '<p class="hint" style="margin:4px 2px 0;color:#2E8C74">✓ 이 주는 ' + wonU(sum.settledAmount) + ' 정산했어요.</p>' : '') +
     '</div>';
 }
@@ -1093,7 +1157,7 @@ function renderSettleTab() {
     '<div class="pcard"><div class="pcard-head"><h3>요일별 모은 금액</h3><span class="chip">이번 주</span></div>' +
     '<div class="task-rows">' + sum.byDay.map((d, i) =>
       '<div class="setting-row" style="padding:8px 2px"><div class="sr-main"><div class="sr-title">' + DAY_FULL[i] + '</div>' +
-      '<div class="sr-sub">' + d.doneCount + '/' + d.totalTasks + '개 완료</div></div>' +
+      '<div class="sr-sub">' + d.doneCount + '/' + d.totalTasks + '개 완료' + (d.mustCount ? ' · 꼭 할 일 ' + d.mustCount + '개' : '') + '</div></div>' +
       '<div style="font-weight:900;font-size:13px;color:' + (d.total ? '#D2603B' : '#C0AC9D') + '">' + wonU(d.total) + '</div></div>'
     ).join('') + '</div></div>' +
     '<div class="pcard"><div class="pcard-head"><h3>정산 내역</h3><span class="chip">' + history.length + '건</span></div>' + historyHTML + '</div>' +
@@ -1651,9 +1715,27 @@ function bindEvents() {
 
   $('#mustDoList').addEventListener('click', e => {
     const del = e.target.closest('[data-must-del]');
-    if (del) { deleteMustDo(todayStr(), del.dataset.mustDel); renderMustDo(); return; }
+    if (del) { deleteMustDo(todayStr(), del.dataset.mustDel); renderKid(); return; }
     const tog = e.target.closest('[data-must-toggle]');
-    if (tog) { toggleMustDo(todayStr(), tog.dataset.mustToggle); renderMustDo(); }
+    if (!tog) return;
+    const id = tog.dataset.mustToggle;
+    const before = mustDosFor(todayStr()).find(x => x.id === id);
+    const wasDone = !!(before && before.done);
+    let rect = null;
+    try { rect = tog.getBoundingClientRect(); } catch (err) { rect = null; }
+    toggleMustDo(todayStr(), id);
+    renderKid();
+    const after = mustDosFor(todayStr()).find(x => x.id === id);
+    if (after && after.done) {
+      if (rect) {
+        gainFx(rect.left + rect.width / 2, rect.top + rect.height / 2, mustDoAmount(after));
+        sparkle(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      }
+      playChime();
+      toast('오늘 꼭 할 일 완료! +' + wonU(mustDoAmount(after)), 1400);
+    } else if (wasDone) {
+      toast('체크를 취소했어요', 1200);
+    }
   });
 
   // 부모님: 할 일
@@ -1860,7 +1942,8 @@ function boot() {
   ui.selectedDate = todayStr();
   ui.weekStart = currentWeekStart();
   ui.todayCache = todayStr();
-  renderAll();
+  const hooked = connectFromSyncHash();
+  if (!hooked) renderAll();
 
   setInterval(() => {
     if (document.hidden) return;
@@ -1882,6 +1965,7 @@ function boot() {
   }
 
   window.addEventListener('online', () => { if (state.sync.enabled) syncNow(); });
+  window.addEventListener('hashchange', () => { connectFromSyncHash(); });
 }
 
 boot();
